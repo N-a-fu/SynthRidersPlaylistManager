@@ -1,0 +1,47 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Pp]ublish/
+
+# Visual Studio / IDE state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test and coverage output
+[Tt]est[Rr]esults/
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Logs, local settings, and machine-specific data
+*.log
+appsettings.Local.json
+settings.local.json
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Never commit copied Synth Riders user/game data or backups
+fixtures/private/
+game-data/
+backups/
+*.bin
+*.playlist
+*.synth
+**/SynthDB
+**/ImagesCache/
+**/tempExt/
+**/CustomSongs/

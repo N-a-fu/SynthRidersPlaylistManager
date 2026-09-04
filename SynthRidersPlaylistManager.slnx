@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SynthRidersPlaylistManager.App/SynthRidersPlaylistManager.App.csproj" />
+    <Project Path="src/SynthRidersPlaylistManager.Core/SynthRidersPlaylistManager.Core.csproj" />
+    <Project Path="src/SynthRidersPlaylistManager.Infrastructure/SynthRidersPlaylistManager.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SynthRidersPlaylistManager.Tests/SynthRidersPlaylistManager.Tests.csproj" />
+  </Folder>
+</Solution>

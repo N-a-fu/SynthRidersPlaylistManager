@@ -1,0 +1,18 @@
+<UserControl x:Class="SynthRidersPlaylistManager.App.Views.SelectedSongMiniPlayerView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:SynthRidersPlaylistManager.App.Controls" MinHeight="96">
+ <Border Background="#171A1F" BorderBrush="{StaticResource Brush.Border}" BorderThickness="1,0,0,1" Padding="12,9">
+  <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="68"/><ColumnDefinition Width="1.05*" MinWidth="150"/><ColumnDefinition Width="1.3*" MinWidth="190"/><ColumnDefinition Width="0.75*" MinWidth="120"/></Grid.ColumnDefinitions>
+   <controls:CoverArtView Width="56" Height="56" DecodePixelWidth="96" CoverPath="{Binding SelectedSong.CoverImagePath}" ToolTip="{Binding SelectedSong.CoverToolTip}" VerticalAlignment="Center"/>
+   <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0"><TextBlock Text="NOW SELECTED" Foreground="{StaticResource Brush.Accent}" FontSize="8" FontWeight="Bold"/><TextBlock Text="{Binding SelectedSong.Title, TargetNullValue=曲を選択してください}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding SelectedSong.Artist}" Foreground="{StaticResource Brush.TextMuted}" FontSize="11" TextTrimming="CharacterEllipsis"/><TextBlock Foreground="{StaticResource Brush.TextMuted}" FontSize="9" TextTrimming="CharacterEllipsis"><Run Text="Mapper: "/><Run Text="{Binding SelectedSong.MapperDisplay, Mode=OneWay}"/><Run Text=" · BPM "/><Run Text="{Binding SelectedSong.BpmDisplay, Mode=OneWay}"/></TextBlock></StackPanel>
+   <Grid Grid.Column="2" Margin="5,0,12,0"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <Button Content="{Binding PreviewButtonGlyph}" Command="{Binding TogglePreviewCommand}" Width="40" Height="34" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip="Audio source未接続"/>
+    <StackPanel Grid.Column="1" VerticalAlignment="Center"><Slider Minimum="0" Maximum="100" Value="0" IsEnabled="False"/><Grid><TextBlock Text="0:00" Foreground="{StaticResource Brush.TextMuted}" FontSize="8"/><TextBlock Text="{Binding SelectedSong.DurationDisplay}" HorizontalAlignment="Right" Foreground="{StaticResource Brush.TextMuted}" FontSize="8"/></Grid></StackPanel>
+    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Audio Preview · Phase 2B 未接続" Foreground="{StaticResource Brush.TextMuted}" FontSize="8" HorizontalAlignment="Center"/>
+   </Grid>
+   <Grid Grid.Column="3"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <StackPanel VerticalAlignment="Center"><TextBlock Text="VOLUME" Foreground="{StaticResource Brush.TextMuted}" FontSize="8"/><Slider Minimum="0" Maximum="100" Value="{Binding Volume}"/></StackPanel><Button Grid.Column="1" Content="{Binding MuteButtonGlyph}" Command="{Binding ToggleMuteCommand}" Width="38" Height="34" Margin="7,0,0,0"/>
+    <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" VerticalAlignment="Center"><TextBlock Text="{Binding SelectedSong.FavoriteGlyph}" FontFamily="Segoe UI Symbol" Foreground="#FF4FA3" FontSize="17" Margin="0,0,7,0"/><TextBlock Text="{Binding SelectedSong.SongType}" Foreground="{StaticResource Brush.TextMuted}" FontSize="9" Margin="0,3,7,0"/><TextBlock Text="{Binding SelectedSong.PlaylistDisplay}" Foreground="#D8C4F1" FontSize="9" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedSong.PlaylistToolTip}"/></WrapPanel>
+   </Grid>
+  </Grid>
+ </Border>
+</UserControl>

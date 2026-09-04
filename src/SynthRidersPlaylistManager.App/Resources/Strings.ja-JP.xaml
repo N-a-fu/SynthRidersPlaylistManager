@@ -1,0 +1,29 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+    <sys:String x:Key="App.Title">Synth Riders Playlist Manager</sys:String>
+    <sys:String x:Key="Header.Detected">SYNTH RIDERS</sys:String>
+    <sys:String x:Key="Header.Library">Library</sys:String>
+    <sys:String x:Key="Header.Favorites">Favorites</sys:String>
+    <sys:String x:Key="Header.Playlists">Playlists</sys:String>
+    <sys:String x:Key="Action.Rescan">↻  再スキャン</sys:String>
+    <sys:String x:Key="Action.Settings">⚙  設定</sys:String>
+    <sys:String x:Key="Action.Save">変更を保存</sys:String>
+    <sys:String x:Key="Nav.Favorites">FAVORITES · INBOX</sys:String>
+    <sys:String x:Key="Nav.Playlists">PLAYLISTS</sys:String>
+    <sys:String x:Key="Nav.Filters">SMART FILTERS</sys:String>
+    <sys:String x:Key="Library.Search">Title / Artist / Mapper を検索</sys:String>
+    <sys:String x:Key="Detail.Title">選択中の曲</sys:String>
+    <sys:String x:Key="Detail.Mapper">Mapper</sys:String>
+    <sys:String x:Key="Detail.Type">タイプ</sys:String>
+    <sys:String x:Key="Detail.Difficulty">難易度</sys:String>
+    <sys:String x:Key="Detail.Playlists">所属Playlist</sys:String>
+    <sys:String x:Key="Audio.Title">AUDIO PREVIEW</sys:String>
+    <sys:String x:Key="Audio.Unavailable">Phase 1 · 音源未接続</sys:String>
+    <sys:String x:Key="Settings.Title">設定</sys:String>
+    <sys:String x:Key="Settings.Language">言語</sys:String>
+    <sys:String x:Key="Settings.Volume">音量</sys:String>
+    <sys:String x:Key="Settings.FavoriteBehavior">Playlist追加後のFavorite</sys:String>
+    <sys:String x:Key="Settings.GamePath">ゲームフォルダ</sys:String>
+    <sys:String x:Key="Settings.Close">閉じる</sys:String>
+</ResourceDictionary>
