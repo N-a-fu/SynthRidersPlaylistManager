@@ -7,6 +7,7 @@ namespace SynthRidersPlaylistManager.App.ViewModels;
 public sealed class SongItemViewModel : ObservableObject
 {
     private bool _isFavorite;
+    private bool _isBlacklisted;
     private bool _isSourceChecked;
     private bool _isDestinationChecked;
 
@@ -20,6 +21,9 @@ public sealed class SongItemViewModel : ObservableObject
         Duration = song.Duration;
         Difficulty = song.Difficulty;
         _isFavorite = song.IsFavorite;
+        _isBlacklisted = song.IsBlacklisted;
+        FileName = song.FileName;
+        FavoriteReference = song.FavoriteReference;
         PlaylistNames = new ObservableCollection<string>(song.PlaylistNames);
         AddedAt = song.AddedAt;
         Availability = song.Availability;
@@ -32,6 +36,10 @@ public sealed class SongItemViewModel : ObservableObject
     }
 
     public SongIdentity Identity { get; }
+    public string? FileName { get; }
+    public string? FavoriteReference { get; }
+    public bool IsBlacklisted { get => _isBlacklisted; set { if (SetProperty(ref _isBlacklisted, value)) OnPropertyChanged(nameof(RowOpacity)); } }
+    public double RowOpacity => IsBlacklisted ? 0.55 : 1;
     public string Title { get; }
     public string Artist { get; }
     public string Mapper { get; }

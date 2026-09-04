@@ -35,8 +35,19 @@ public static class SongDragDropBehavior
     private static void OnEnableDragChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not DataGrid grid) return;
-        if ((bool)e.NewValue) { grid.PreviewMouseLeftButtonDown += MouseDown; grid.PreviewMouseMove += MouseMove; }
-        else { grid.PreviewMouseLeftButtonDown -= MouseDown; grid.PreviewMouseMove -= MouseMove; }
+        if ((bool)e.NewValue)
+        {
+            grid.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(MouseDown), true);
+            grid.AddHandler(Mouse.PreviewMouseMoveEvent, new MouseEventHandler(MouseMove), true);
+            DropDiagnostic.Attach(grid);
+        }
+        else
+        {
+            grid.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(MouseDown));
+            grid.RemoveHandler(Mouse.PreviewMouseMoveEvent, new MouseEventHandler(MouseMove));
+            DropDiagnostic.Detach(grid);
+            grid.ClearValue(DragPayloadProperty);
+        }
     }
     private static void OnEnableDropChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -46,7 +57,7 @@ public static class SongDragDropBehavior
     }
     private static void MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not DataGrid grid) return;
+        if (sender is not DataGrid grid || e.ChangedButton != MouseButton.Left) return;
         if (grid.DataContext is CollectionPaneViewModel pane) pane.Activate();
         grid.SetValue(DragStartProperty, e.GetPosition(grid));
         var origin = e.OriginalSource as DependencyObject;
@@ -69,12 +80,17 @@ public static class SongDragDropBehavior
         if (sender is not DataGrid grid || e.LeftButton != MouseButtonState.Pressed) return;
         var current = e.GetPosition(grid);
         var dragStart = (Point)grid.GetValue(DragStartProperty);
-        if (Math.Abs(current.X - dragStart.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(current.Y - dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        if (!ExceedsDragThreshold(dragStart, current)) return;
         if (grid.GetValue(DragPayloadProperty) is not SongDragPayload payload) return;
         var layer = AdornerLayer.GetAdornerLayer(grid); var adorner = layer is null ? null : new DragCountAdorner(grid, payload.Feedback); if (adorner is not null) layer!.Add(adorner);
+        DropDiagnostic.Begin(grid, payload);
         try { DragDrop.DoDragDrop(grid, new DataObject(typeof(SongDragPayload), payload), DragDropEffects.Copy); }
-        finally { if (adorner is not null) layer!.Remove(adorner); grid.ClearValue(DragPayloadProperty); }
+        finally { DropDiagnostic.End(); if (adorner is not null) layer!.Remove(adorner); grid.ClearValue(DragPayloadProperty); }
     }
+
+    internal static bool ExceedsDragThreshold(Point start, Point current) =>
+        Math.Abs(current.X - start.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+        Math.Abs(current.Y - start.Y) >= SystemParameters.MinimumVerticalDragDistance;
 
     internal static SongItemViewModel? ResolveDragItem(DataGrid grid, DependencyObject? origin)
     {
@@ -94,18 +110,19 @@ public static class SongDragDropBehavior
     }
     private static void DragEnter(object sender, DragEventArgs e)
     {
-        if (sender is not DataGrid grid || e.Data.GetData(typeof(SongDragPayload)) is not SongDragPayload payload) { e.Effects = DragDropEffects.None; return; }
+        if (sender is not DataGrid grid || e.Data.GetData(typeof(SongDragPayload)) is not SongDragPayload payload) { e.Effects = DragDropEffects.None; if (sender is DataGrid invalidGrid) DropDiagnostic.HandlerResult(invalidGrid, e, null, false); return; }
         var command = GetDropCommand(grid); var allowed = command?.CanExecute(payload) == true;
         var targetName = (grid.DataContext as CollectionPaneViewModel)?.CollectionName ?? "Playlist";
         SetIsDragOver(grid, allowed); SetDragFeedback(grid, allowed ? $"＋ {payload.Feedback}を{targetName}へ追加" : "Dropできません");
         e.Effects = allowed ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true;
+        DropDiagnostic.HandlerResult(grid, e, payload, allowed);
     }
     private static void DragLeave(object sender, DragEventArgs e) { if (sender is DataGrid grid) { SetIsDragOver(grid, false); SetDragFeedback(grid, ""); } }
     private static void Drop(object sender, DragEventArgs e)
     {
         if (sender is not DataGrid grid) return; SetIsDragOver(grid, false);
         var payload = e.Data.GetData(typeof(SongDragPayload)) as SongDragPayload; var command = GetDropCommand(grid);
-        if (payload is not null && command?.CanExecute(payload) == true) { command.Execute(payload); e.Effects = DragDropEffects.Copy; } else e.Effects = DragDropEffects.None;
+        if (payload is not null && command?.CanExecute(payload) == true) { DropDiagnostic.HandlerResult(grid, e, payload, true); command.Execute(payload); e.Effects = DragDropEffects.Copy; } else { e.Effects = DragDropEffects.None; DropDiagnostic.HandlerResult(grid, e, payload, false); }
         SetDragFeedback(grid, ""); e.Handled = true;
     }
 

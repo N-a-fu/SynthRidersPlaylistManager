@@ -27,6 +27,14 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
         var covers = ReadCoverCatalog(imageLocation, warnings);
 
         var rows = ReadDatabase(database, cancellationToken);
+        IReadOnlySet<string> blacklist = new HashSet<string>(StringComparer.Ordinal);
+        var gameRoot = RequireAvailable(environment, DataLocationKind.GameRoot);
+        if (gameRoot is not null)
+        {
+            try { blacklist = SongFlagsStore.ReadBlacklist(gameRoot); }
+            catch (Exception e) when (IsReadFailure(e) || e is JsonException or InvalidDataException or InvalidOperationException)
+            { warnings.Add("Blacklistを確認できません。再スキャン前に保存先とJSONを確認してください。"); }
+        }
         var builders = new Dictionary<string, SongBuilder>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
@@ -91,7 +99,12 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
         var favoriteResolved = favoriteHashes.Count(hash => rows.Any(row => string.Equals(row.Hash, hash, StringComparison.OrdinalIgnoreCase)));
         var songs = builders.Values.Select(builder => builder.ToSong(
                 favoriteHashes.Contains(builder.Hash),
-                playlistMemberships.TryGetValue(builder.Hash, out var memberships) ? memberships : []))
+                playlistMemberships.TryGetValue(builder.Hash, out var memberships) ? memberships : []) with
+                {
+                    FavoriteReference = builder.Kind == SongKind.Custom && builder.Complete ? $"{builder.Title}-{builder.Artist}-{builder.Hash}" : null,
+                    FileName = rows.FirstOrDefault(r => string.Equals(r.Hash, builder.Hash, StringComparison.OrdinalIgnoreCase))?.FileName,
+                    IsBlacklisted = rows.Any(r => string.Equals(r.Hash, builder.Hash, StringComparison.OrdinalIgnoreCase) && blacklist.Contains(r.FileName))
+                })
             .OrderBy(song => song.Title, StringComparer.CurrentCultureIgnoreCase).ThenBy(song => song.Artist, StringComparer.CurrentCultureIgnoreCase).ToArray();
 
         var missing = songs.Count(x => x.Availability == SongAvailability.Missing);

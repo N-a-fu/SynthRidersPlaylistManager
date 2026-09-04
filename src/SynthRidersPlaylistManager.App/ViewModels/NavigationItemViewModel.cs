@@ -46,6 +46,5 @@ public sealed class NavigationItemViewModel : Mvvm.ObservableObject
     public ICommand? OpenAsSourceCommand { get; set; }
     public ICommand? SetAsDestinationCommand { get; set; }
     public ICommand? PrepareRenameCommand { get; set; }
-    public ICommand? DuplicateCommand { get; set; }
     public ICommand? RequestDeleteCommand { get; set; }
 }

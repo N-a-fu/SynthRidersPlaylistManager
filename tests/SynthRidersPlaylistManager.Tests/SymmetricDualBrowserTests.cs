@@ -10,7 +10,7 @@ public sealed class SymmetricDualBrowserTests
     {
         var vm = CreateAllSongsTo("TEST_PLAYLIST"); var song = vm.PaneA.VisibleSongs.Cast<SongItemViewModel>().First(x => !x.PlaylistNames.Contains("TEST_PLAYLIST"));
         vm.PaneB.DropCommand.Execute(vm.PaneA.CreateDragPayload(song));
-        Assert.Contains("TEST_PLAYLIST", song.PlaylistNames); Assert.True(vm.HasMockChanges);
+        Assert.Contains("TEST_PLAYLIST", song.PlaylistNames);
     }
 
     [Fact]
@@ -73,20 +73,10 @@ public sealed class SymmetricDualBrowserTests
     }
 
     [Fact]
-    public void PlaylistMoveWorksInBothDirections()
-    {
-        var vm = new MainViewModel(); vm.PaneA.SelectedCollection = Playlist(vm, "Workout"); vm.PaneB.SelectedCollection = Playlist(vm, "TEST_PLAYLIST");
-        var aSong = vm.PaneA.VisibleSongs.Cast<SongItemViewModel>().First(x => !x.PlaylistNames.Contains("TEST_PLAYLIST")); vm.MoveToOpposite(vm.PaneA, [aSong]);
-        Assert.DoesNotContain("Workout", aSong.PlaylistNames); Assert.Contains("TEST_PLAYLIST", aSong.PlaylistNames);
-        var bSong = vm.PaneB.VisibleSongs.Cast<SongItemViewModel>().First(x => !x.PlaylistNames.Contains("Workout")); vm.MoveToOpposite(vm.PaneB, [bSong]);
-        Assert.DoesNotContain("TEST_PLAYLIST", bSong.PlaylistNames); Assert.Contains("Workout", bSong.PlaylistNames);
-    }
-
-    [Fact]
     public void GameRunningBlocksBidirectionalEditing()
     {
         var vm = new MainViewModel(); vm.PaneA.SelectedCollection = Playlist(vm, "Workout"); vm.PaneB.SelectedCollection = Playlist(vm, "TEST_PLAYLIST"); vm.GameState = GameAccessState.RunningReadOnly;
-        Assert.False(vm.CanAddToOpposite(vm.PaneA)); Assert.False(vm.CanAddToOpposite(vm.PaneB)); Assert.False(vm.CanMoveToOpposite(vm.PaneA)); Assert.False(vm.CanMoveToOpposite(vm.PaneB));
+        Assert.False(vm.CanAddToOpposite(vm.PaneA)); Assert.False(vm.CanAddToOpposite(vm.PaneB));
         Assert.False(vm.PaneA.DropCommand.CanExecute(new SongDragPayload([vm.Songs[0]], "B"))); Assert.False(vm.PaneB.DropCommand.CanExecute(new SongDragPayload([vm.Songs[0]], "A")));
     }
 

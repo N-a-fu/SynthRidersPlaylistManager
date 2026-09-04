@@ -20,4 +20,7 @@ public sealed record Song(
     string? CoverImagePath = null,
     string? CoverKey = null,
     AudioPreviewState AudioState = AudioPreviewState.Missing,
-    string? AudioPreviewPath = null);
+    string? AudioPreviewPath = null,
+    string? FileName = null,
+    bool IsBlacklisted = false,
+    string? FavoriteReference = null);

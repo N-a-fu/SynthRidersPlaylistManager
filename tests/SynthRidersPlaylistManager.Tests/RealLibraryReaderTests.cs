@@ -157,6 +157,25 @@ public sealed class RealLibraryReaderTests
         Assert.All(songs, song => Assert.Equal(SongAvailability.Available, song.Availability));
     }
 
+    [Fact]
+    public async Task BlacklistMapsExactSynthDbFileNameAndDoesNotAffectFavoriteOrAvailability()
+    {
+        using var fixture = new LibraryFixture();
+        fixture.AddTrack('a', "Blocked", "Artist", "Mapper", "blocked.synth");
+        fixture.AddTrack('b', "Other", "Artist", "Mapper", "other.synth");
+        fixture.WriteFavorites(fixture.Hash('a'));
+        File.WriteAllText(Path.Combine(fixture.Root, "twitchsettings.bin"), "{\"Blacklist\":[\"blocked.synth\",\"OTHER.synth\"]}");
+        var environment = fixture.Environment();
+        environment = environment with { Locations = environment.Locations.Append(new DataLocation(DataLocationKind.GameRoot, fixture.Root, DataLocationSource.Derived, DataLocationStatus.Available, DateTimeOffset.Now, "fixture", false)).ToArray() };
+        var songs = (await fixture.Reader.LoadAsync(environment)).Songs;
+        var blocked = Assert.Single(songs, x => x.IsBlacklisted);
+        Assert.Equal("blocked.synth", blocked.FileName);
+        Assert.Equal("Blocked-Artist-" + fixture.Hash('a'), blocked.FavoriteReference);
+        Assert.True(blocked.IsFavorite);
+        Assert.Equal(SongAvailability.Available, blocked.Availability);
+        Assert.False(Assert.Single(songs, x => x.Title == "Other").IsBlacklisted);
+    }
+
     private sealed class LibraryFixture : IDisposable
     {
         private readonly SqliteConnection _writeConnection;

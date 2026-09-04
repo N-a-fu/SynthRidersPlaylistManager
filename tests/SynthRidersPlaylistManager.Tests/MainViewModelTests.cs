@@ -113,7 +113,6 @@ public sealed class MainViewModelTests
 
         Assert.Equal(before + 1, viewModel.DestinationSongCount);
         Assert.Single(song.PlaylistNames, name => name == "TEST_PLAYLIST");
-        Assert.True(viewModel.HasMockChanges);
         Assert.Contains("1曲は既に登録済み", viewModel.StatusMessage);
     }
 
@@ -197,16 +196,7 @@ public sealed class MainViewModelTests
         var duplicate = vm.Songs.First(x => x.PlaylistNames.Contains("TEST_PLAYLIST")); var newSong = vm.Songs.First(x => !x.PlaylistNames.Contains("TEST_PLAYLIST"));
         duplicate.IsSourceChecked = true; newSong.IsSourceChecked = true; var before = vm.DestinationSongCount;
         vm.BulkAddCommand.Execute(null);
-        Assert.Equal(before + 1, vm.DestinationSongCount); Assert.Contains("1曲は既に登録済み", vm.StatusMessage); Assert.True(vm.HasMockChanges);
-    }
-
-    [Fact]
-    public void BulkMoveRemovesRealSourceMembershipAndAddsDestination()
-    {
-        var vm = new MainViewModel(); var source = vm.PlaylistNavigation.First(x => x.PlaylistName == "Workout"); vm.SelectedSourceNavigation = source;
-        var song = vm.SourceSongsView.Cast<SongItemViewModel>().First(x => !x.PlaylistNames.Contains("TEST_PLAYLIST")); song.IsSourceChecked = true;
-        Assert.True(vm.BulkMoveCommand.CanExecute(null)); vm.BulkMoveCommand.Execute(null);
-        Assert.DoesNotContain("Workout", song.PlaylistNames); Assert.Contains("TEST_PLAYLIST", song.PlaylistNames);
+        Assert.Equal(before + 1, vm.DestinationSongCount); Assert.Contains("1曲は既に登録済み", vm.StatusMessage);
     }
 
     [Fact]
@@ -214,26 +204,17 @@ public sealed class MainViewModelTests
     {
         var vm = new MainViewModel(); var playlist = vm.PlaylistNavigation.First(x => x.PlaylistName == "TEST_PLAYLIST"); vm.SelectedSourceNavigation = playlist;
         vm.SourceSongsView.Cast<SongItemViewModel>().First().IsSourceChecked = true;
-        Assert.True(vm.IsSamePlaylist); Assert.False(vm.BulkAddCommand.CanExecute(null)); Assert.False(vm.BulkMoveCommand.CanExecute(null));
+        Assert.True(vm.IsSamePlaylist); Assert.False(vm.BulkAddCommand.CanExecute(null));
     }
 
     [Fact]
-    public void PlaylistCreateRenameDuplicateAndDeleteAreMockOperations()
+    public void PlaylistCreateRenameAndDeleteAreAvailable()
     {
         var vm = new MainViewModel(); var start = vm.PlaylistCount; vm.PlaylistNameDraft = "New Mix"; vm.CreatePlaylistCommand.Execute(null);
         Assert.Equal(start + 1, vm.PlaylistCount); Assert.Equal("New Mix", vm.DestinationPlaylistName);
         vm.PlaylistNameDraft = "Renamed Mix"; vm.RenamePlaylistCommand.Execute(null); Assert.Equal("Renamed Mix", vm.DestinationPlaylistName);
-        var renamed = vm.SelectedDestinationNavigation!; vm.DuplicatePlaylistCommand.Execute(renamed); Assert.Equal(start + 2, vm.PlaylistCount); Assert.StartsWith("Renamed Mix Copy", vm.DestinationPlaylistName);
-        var copy = vm.SelectedDestinationNavigation!; vm.RequestDeletePlaylistCommand.Execute(copy); Assert.True(vm.IsDeleteConfirmationOpen); vm.ConfirmDeletePlaylistCommand.Execute(null);
-        Assert.Equal(start + 1, vm.PlaylistCount); Assert.False(vm.IsDeleteConfirmationOpen); Assert.True(vm.HasMockChanges);
-    }
-
-    [Fact]
-    public void DuplicateCopiesMembersAndAvoidsNameCollision()
-    {
-        var vm = new MainViewModel(); var source = vm.PlaylistNavigation.First(x => x.PlaylistName == "TEST_PLAYLIST");
-        vm.DuplicatePlaylistCommand.Execute(source); var first = vm.DestinationPlaylistName; vm.DuplicatePlaylistCommand.Execute(source); var second = vm.DestinationPlaylistName;
-        Assert.NotEqual(first, second); Assert.Equal(2, vm.Songs.Count(x => x.PlaylistNames.Contains(first))); Assert.Equal(2, vm.Songs.Count(x => x.PlaylistNames.Contains(second)));
+        var renamed = vm.SelectedDestinationNavigation!; vm.RequestDeletePlaylistCommand.Execute(renamed); Assert.True(vm.IsDeleteConfirmationOpen); vm.ConfirmDeletePlaylistCommand.Execute(null);
+        Assert.Equal(start, vm.PlaylistCount); Assert.False(vm.IsDeleteConfirmationOpen);
     }
 
     [Fact]
@@ -247,8 +228,8 @@ public sealed class MainViewModelTests
     public void GameRunningDisablesEveryEditingCommandButKeepsChecksAvailable()
     {
         var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs), GameState = GameAccessState.RunningReadOnly }; var song = vm.Songs[2]; song.IsSourceChecked = true; vm.PlaylistNameDraft = "Blocked";
-        Assert.True(song.IsSourceChecked); Assert.False(vm.BulkAddCommand.CanExecute(null)); Assert.False(vm.BulkMoveCommand.CanExecute(null)); Assert.False(vm.FavoriteBulkOnCommand.CanExecute(null)); Assert.False(vm.CreatePlaylistCommand.CanExecute(null));
-        var playlist = vm.PlaylistNavigation[0]; Assert.False(vm.DuplicatePlaylistCommand.CanExecute(playlist)); Assert.False(vm.RequestDeletePlaylistCommand.CanExecute(playlist));
+        Assert.True(song.IsSourceChecked); Assert.False(vm.BulkAddCommand.CanExecute(null)); Assert.False(vm.FavoriteBulkOnCommand.CanExecute(null)); Assert.False(vm.CreatePlaylistCommand.CanExecute(null));
+        var playlist = vm.PlaylistNavigation[0]; Assert.False(vm.RequestDeletePlaylistCommand.CanExecute(playlist));
     }
 
     [Fact]
@@ -269,7 +250,7 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public void BlacklistHasPersistentNavigationEntryButNoSongsUntilFeatureIsImplemented()
+    public void BlacklistHasPersistentNavigationEntryAndInitiallyNoMockMembers()
     {
         using var vm = new MainViewModel();
         var blacklist = Assert.Single(vm.SmartNavigation, item => item.Filter == NavigationFilter.Blacklist);

@@ -1,17 +1,42 @@
 # Synth Riders Playlist Manager
 
-Steam 版 Synth Riders V3 以降を対象とする、Windows 用のローカル楽曲ライブラリ／Favorites／Playlist 管理アプリです。
+Windows向けの、Steam版 Synth Riders V3系用ローカルライブラリ／Playlist管理アプリです。Synth Ridersのローカルデータを使用し、オフラインで動作します。
 
-現在は **Phase 2C（実Cover ArtのRead-only統合）** です。検出済み実環境では実曲・Favorites・Playlistと、確認できたhash対応Coverを表示し、全ゲームデータ書込操作を無効化します。Cover未設定は正常状態としてPlaceholderを表示します。Writerは実装していません。
+## 対象
 
-## 方針
+- Windows 10 / 11 x64
+- Steam版 Synth Riders
+- Synth Riders V3系
 
-- Windows 10 / 11 x64、C# / .NET / WPF / MVVM
-- ゲーム側データを Source of Truth とし、基本機能はオフラインで動作
-- Steam 版 V3+ のみを対象
-- 未確認の保存形式を推測せず、書き込み前に実データで検証
-- 将来は GitHub Releases で self-contained Portable ZIP を配布
+## 主な機能
 
-本プロジェクトは非公式ツールであり、Synth Riders または Kluge Interactive の公式製品ではありません。
+- Dual Paneによるライブラリ／Playlist表示
+- Drag & DropによるPlaylistへの曲追加
+- Playlistの新規作成、名前変更、削除
+- Playlistからの曲の削除
+- Favorite管理
+- Blacklist管理
+- Mini PlayerによるCustom Songの音声プレビュー
+- 日本語／Englishの即時切り替え
+- Playlistが0件の状態から利用可能
 
-Phase 2CのCover設計と実環境件数は [`docs/phase-2c-cover-art.md`](docs/phase-2c-cover-art.md)、Phase 2BのReader設計は [`docs/phase-2b-real-song-library.md`](docs/phase-2b-real-song-library.md)、環境検出は [`docs/phase-2a-environment-discovery.md`](docs/phase-2a-environment-discovery.md) を参照してください。
+## Mini Playerの音声プレビューについて
+
+Mini Playerで再生できるのは、Synth Riders側でプレビュー用音声が生成済みのCustom Songです。ゲーム内で一度もプレビューしていない曲は、Mini Playerで再生できない場合があります。
+
+また、Synth Riders側で再スキャン等を行うと、生成済みのプレビュー音声が消えて0件になる場合があります。その場合は、ゲーム内で対象曲のプレビューを一度再生すると、再びMini Playerで再生できるようになります。
+
+## データの安全性
+
+- 利用前にSynth Ridersのユーザーデータをバックアップすることを推奨します。
+- Synth Ridersの起動中はデータを編集できず、Read-onlyで動作します。
+- Playlistから曲を削除しても、Custom Song本体は削除しません。
+- ユーザーのCustom Songs、Playlist、Favorite、Blacklistなどを配布物へ同梱しません。
+
+## Steam Cloud
+
+Managerでローカルデータを変更した後、Steam Cloudの競合画面が表示される場合があります。本アプリがSteam Cloudを操作したり、無効化したりすることはありません。競合が発生した場合は表示内容を確認し、使用するデータをユーザー自身で選択してください。
+
+## 非公式ツールについて
+
+本アプリは非公式ツールです。Synth RidersおよびKluge Interactiveとの提携・承認関係はありません。

@@ -38,6 +38,52 @@ public sealed class RealModeViewModelTests
         Assert.Same(vm.Songs, vm.PaneB.Owner.Songs);
     }
 
+    [Fact]
+    public async Task RealBlacklistUsesDetectedRootAndReturnedGameStateWithoutEnablingPlaylistWrites()
+    {
+        var now = DateTimeOffset.Now;
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fixture-game-root");
+        var env = new EnvironmentDiscoveryResult([new(DataLocationKind.GameRoot, root, DataLocationSource.Derived, DataLocationStatus.Available, now, "fixture", false)], "fixture", now);
+        Song[] songs = [new(new(SongKind.Custom, "a"), "A", "Artist", "Mapper", null, null, "", true, [], null, FileName: "a.synth", IsBlacklisted: true)];
+        var snapshot = new LibrarySnapshot(songs, [], [], [], new(1, 1, 0, 1, 0, 0, 0, 0, 0));
+        var store = new FlagsStub();
+        using var vm = new MainViewModel(new MockLibraryDataSource(), new EnvironmentStub(env), null, new ReaderStub(snapshot), songFlagsStore: store);
+        await vm.InitializeEnvironmentAsync();
+        vm.PaneB.SelectedCollection = vm.SmartNavigation.Single(x => x.Filter == NavigationFilter.Blacklist);
+        var song = Assert.Single(vm.PaneB.VisibleSongs.Cast<SongItemViewModel>());
+        vm.PaneB.ToggleCheckedCommand.Execute(song);
+        vm.PaneB.RemoveBlacklistCommand.Execute(null);
+        Assert.Equal(root, store.Root);
+        Assert.Equal("a.synth", Assert.Single(store.FileNames));
+        Assert.False(song.IsBlacklisted);
+        Assert.Empty(vm.PaneB.VisibleSongs.Cast<object>());
+        Assert.Same(song, Assert.Single(vm.PaneA.VisibleSongs.Cast<SongItemViewModel>()));
+        Assert.True(song.IsFavorite);
+        Assert.False(vm.CanManagePlaylists);
+        Assert.False(vm.IsDragDropEnabled);
+        store.Fail = true;
+        vm.PaneB.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.AllSongs);
+        vm.PaneB.AddBlacklistCommand.Execute(null);
+        Assert.False(song.IsBlacklisted);
+        store.IsGameStopped = false;
+        Assert.False(vm.PaneB.AddBlacklistCommand.CanExecute(null));
+    }
+
+    private sealed class FlagsStub : ISongFlagsStore
+    {
+        public bool IsGameStopped { get; set; } = true;
+        public bool Fail { get; set; }
+        public string? Root { get; private set; }
+        public IReadOnlyCollection<string> FileNames { get; private set; } = [];
+        public IReadOnlySet<string> SetFavorites(string path, IReadOnlyCollection<string> entries, bool enabled) => throw new NotSupportedException();
+        public IReadOnlySet<string> SetBlacklist(string gameRoot, IReadOnlyCollection<string> fileNames, bool enabled)
+        {
+            if (Fail) throw new System.IO.IOException();
+            Root = gameRoot; FileNames = fileNames;
+            return enabled ? fileNames.ToHashSet(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+        }
+    }
+
     private sealed class EnvironmentStub(EnvironmentDiscoveryResult result) : IEnvironmentDiscoveryService
     {
         public Task<EnvironmentDiscoveryResult> DiscoverAsync(CancellationToken cancellationToken = default) => Task.FromResult(result);
