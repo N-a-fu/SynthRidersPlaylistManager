@@ -18,4 +18,6 @@ public sealed record Song(
     bool HasAudio = false,
     CoverArtState CoverState = CoverArtState.Missing,
     string? CoverImagePath = null,
-    string? CoverKey = null);
+    string? CoverKey = null,
+    AudioPreviewState AudioState = AudioPreviewState.Missing,
+    string? AudioPreviewPath = null);

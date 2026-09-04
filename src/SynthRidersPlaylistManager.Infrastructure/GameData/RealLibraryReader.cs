@@ -22,6 +22,7 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
 
         var customLocation = environment.Find(DataLocationKind.CustomSongs);
         var imageLocation = environment.Find(DataLocationKind.ImagesCache);
+        var audioLocation = environment.Find(DataLocationKind.TempAudio);
         var customFiles = ReadFileNames(customLocation, "*.synth", warnings);
         var covers = ReadCoverCatalog(imageLocation, warnings);
 
@@ -52,7 +53,7 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
             builders[hash] = new(hash, SongKind.Custom, row.Title, row.Artist, row.Mapper, row.Bpm,
                 row.DurationSeconds is >= 0 ? TimeSpan.FromSeconds(row.DurationSeconds.Value) : null,
                 row.Created is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.Created.Value), availability,
-                covers.Resolve(hash), !string.IsNullOrWhiteSpace(row.Title) && !string.IsNullOrWhiteSpace(row.Artist));
+                covers.Resolve(hash), ResolveAudio(audioLocation, row.FileName), !string.IsNullOrWhiteSpace(row.Title) && !string.IsNullOrWhiteSpace(row.Artist));
         }
 
         var playlistMemberships = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -80,7 +81,7 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
                         unresolved.Add(new($"Playlist: {name}", hash, entry.Name, "SynthDBと照合できないため公式側または未解決として保持しました。"));
                         builders[hash] = new(hash, SongKind.OfficialOrDlc, entry.Name, entry.Artist, entry.Mapper, null,
                             entry.DurationSeconds is >= 0 ? TimeSpan.FromSeconds(entry.DurationSeconds.Value) : null,
-                            null, SongAvailability.Unknown, CoverResolution.Missing(hash),
+                            null, SongAvailability.Unknown, CoverResolution.Missing(hash), AudioResolution.Missing,
                             !string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.Artist));
                     }
                 }
@@ -173,6 +174,37 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
     private static int ReadBigEndianInt32(ReadOnlySpan<byte> value) =>
         (value[0] << 24) | (value[1] << 16) | (value[2] << 8) | value[3];
 
+    private static AudioResolution ResolveAudio(DataLocation? location, string fileName)
+    {
+        if (location is not { Status: DataLocationStatus.Available, ResolvedPath: not null })
+            return location?.Status == DataLocationStatus.Unavailable
+                ? new(AudioPreviewState.ParentLocationUnavailable, null)
+                : new(AudioPreviewState.Unknown, null);
+
+        try
+        {
+            var directory = Path.Combine(location.ResolvedPath, Path.GetFileName(fileName));
+            if (!Directory.Exists(directory)) return AudioResolution.Missing;
+            var candidates = Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Where(path => string.Equals(Path.GetExtension(path), ".ogg", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (candidates.Length == 0) return AudioResolution.Missing;
+            if (candidates.Length != 1 || !HasOggHeader(candidates[0])) return new(AudioPreviewState.Invalid, null);
+            return new(AudioPreviewState.Available, candidates[0]);
+        }
+        catch (Exception e) when (IsReadFailure(e))
+        {
+            return new(AudioPreviewState.Unknown, null);
+        }
+    }
+
+    private static bool HasOggHeader(string path)
+    {
+        Span<byte> header = stackalloc byte[4];
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return stream.Read(header) == header.Length && header.SequenceEqual("OggS"u8);
+    }
+
     private static IReadOnlyList<DbRow> ReadDatabase(string path, CancellationToken cancellationToken)
     {
         var connectionString = new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Cache = SqliteCacheMode.Private, Pooling = false }.ToString();
@@ -258,11 +290,16 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
 
     private sealed record DbRow(string FileName, string Title, string Artist, string Mapper, double? Bpm, string Hash, double? DurationSeconds, long? Created);
     private sealed record PlaylistEntry(string Hash, string Name, string Artist, string Mapper, double? DurationSeconds);
-    private sealed record SongBuilder(string Hash, SongKind Kind, string Title, string Artist, string Mapper, double? Bpm, TimeSpan? Duration, DateTimeOffset? AddedAt, SongAvailability Availability, CoverResolution Cover, bool Complete)
+    private sealed record SongBuilder(string Hash, SongKind Kind, string Title, string Artist, string Mapper, double? Bpm, TimeSpan? Duration, DateTimeOffset? AddedAt, SongAvailability Availability, CoverResolution Cover, AudioResolution Audio, bool Complete)
     {
         public Song ToSong(bool favorite, IReadOnlyList<string> memberships) => new(new(Kind, Hash), string.IsNullOrWhiteSpace(Title) ? "（タイトル不明）" : Title,
             string.IsNullOrWhiteSpace(Artist) ? "（アーティスト不明）" : Artist, Mapper, Bpm, Duration, "Unknown", favorite, memberships, AddedAt, Hash, Availability, Complete,
-            Cover.State == CoverArtState.Available, false, Cover.State, Cover.Path, Cover.Key);
+            Cover.State == CoverArtState.Available, Audio.State == AudioPreviewState.Available, Cover.State, Cover.Path, Cover.Key, Audio.State, Audio.Path);
+    }
+
+    private sealed record AudioResolution(AudioPreviewState State, string? Path)
+    {
+        public static AudioResolution Missing { get; } = new(AudioPreviewState.Missing, null);
     }
 
     private sealed record PngInfo(bool IsValid, int Width, int Height)

@@ -1,5 +1,7 @@
 using SynthRidersPlaylistManager.App.ViewModels;
+using SynthRidersPlaylistManager.App.Services;
 using SynthRidersPlaylistManager.Core.Models;
+using SynthRidersPlaylistManager.Core.Services;
 
 namespace SynthRidersPlaylistManager.Tests;
 
@@ -247,5 +249,60 @@ public sealed class MainViewModelTests
         var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs), GameState = GameAccessState.RunningReadOnly }; var song = vm.Songs[2]; song.IsSourceChecked = true; vm.PlaylistNameDraft = "Blocked";
         Assert.True(song.IsSourceChecked); Assert.False(vm.BulkAddCommand.CanExecute(null)); Assert.False(vm.BulkMoveCommand.CanExecute(null)); Assert.False(vm.FavoriteBulkOnCommand.CanExecute(null)); Assert.False(vm.CreatePlaylistCommand.CanExecute(null));
         var playlist = vm.PlaylistNavigation[0]; Assert.False(vm.DuplicatePlaylistCommand.CanExecute(playlist)); Assert.False(vm.RequestDeletePlaylistCommand.CanExecute(playlist));
+    }
+
+    [Fact]
+    public void AudioPreviewUsesSelectedSongPathAndStopsWhenSelectionChanges()
+    {
+        var player = new FakeAudioPreviewPlayer();
+        using var vm = new MainViewModel(new AudioDataSource(), null, null, null, player);
+
+        Assert.True(vm.TogglePreviewCommand.CanExecute(null));
+        vm.TogglePreviewCommand.Execute(null);
+        Assert.Equal("preview.ogg", player.LoadedPath);
+        Assert.True(vm.IsPreviewPlaying);
+
+        vm.SelectedSong = vm.Songs[1];
+        Assert.True(player.StopCount > 0);
+        Assert.False(vm.TogglePreviewCommand.CanExecute(null));
+        Assert.False(vm.IsPreviewPlaying);
+    }
+
+    [Fact]
+    public void BlacklistHasPersistentNavigationEntryButNoSongsUntilFeatureIsImplemented()
+    {
+        using var vm = new MainViewModel();
+        var blacklist = Assert.Single(vm.SmartNavigation, item => item.Filter == NavigationFilter.Blacklist);
+        vm.PaneA.SelectedCollection = blacklist;
+        Assert.Equal("ブラックリスト", blacklist.Label);
+        Assert.Equal(0, vm.PaneA.VisibleCount);
+    }
+
+    private sealed class AudioDataSource : ILibraryDataSource
+    {
+        public IReadOnlyList<Song> GetSongs() =>
+        [
+            new(new(SongKind.Custom, "audio"), "Audio", "Artist", "Mapper", null, TimeSpan.FromMinutes(3), "Unknown", false, [], null,
+                HasAudio: true, AudioState: AudioPreviewState.Available, AudioPreviewPath: "preview.ogg"),
+            new(new(SongKind.Custom, "missing"), "Missing", "Artist", "Mapper", null, null, "Unknown", false, [], null)
+        ];
+        public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("mock", "TEST_PLAYLIST", 0)];
+    }
+
+    private sealed class FakeAudioPreviewPlayer : IAudioPreviewPlayer
+    {
+        public event EventHandler? PlaybackStateChanged;
+        public bool IsPlaying { get; private set; }
+        public TimeSpan Position { get; private set; }
+        public TimeSpan Duration { get; private set; } = TimeSpan.FromMinutes(3);
+        public float Volume { get; set; }
+        public string? LoadedPath { get; private set; }
+        public int StopCount { get; private set; }
+        public void Load(string path) => LoadedPath = path;
+        public void Play() { IsPlaying = true; PlaybackStateChanged?.Invoke(this, EventArgs.Empty); }
+        public void Pause() { IsPlaying = false; PlaybackStateChanged?.Invoke(this, EventArgs.Empty); }
+        public void Seek(TimeSpan position) => Position = position;
+        public void Stop() { IsPlaying = false; StopCount++; PlaybackStateChanged?.Invoke(this, EventArgs.Empty); }
+        public void Dispose() => Stop();
     }
 }

@@ -127,6 +127,36 @@ public sealed class RealLibraryReaderTests
         Assert.Equal(1, snapshot.Diagnostics.Covers?.OrphanImages);
     }
 
+    [Fact]
+    public async Task ExactSynthDbFileNameMapsValidTempAudioWithoutAffectingSongAvailability()
+    {
+        using var fixture = new LibraryFixture();
+        fixture.AddTrack('a', "Preview", "Artist", "Mapper", "preview.synth");
+        fixture.WriteOgg("preview.synth", "audio.ogg", valid: true);
+
+        var song = Assert.Single((await fixture.Reader.LoadAsync(fixture.Environment())).Songs);
+
+        Assert.Equal(AudioPreviewState.Available, song.AudioState);
+        Assert.True(song.HasAudio);
+        Assert.EndsWith("audio.ogg", song.AudioPreviewPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SongAvailability.Available, song.Availability);
+    }
+
+    [Fact]
+    public async Task MissingOrInvalidTempAudioIsOptionalMetadataNotSongMissing()
+    {
+        using var fixture = new LibraryFixture();
+        fixture.AddTrack('a', "Missing audio", "Artist", "Mapper", "missing.synth");
+        fixture.AddTrack('b', "Invalid audio", "Artist", "Mapper", "invalid.synth");
+        fixture.WriteOgg("invalid.synth", "audio.ogg", valid: false);
+
+        var songs = (await fixture.Reader.LoadAsync(fixture.Environment())).Songs;
+
+        Assert.Equal(AudioPreviewState.Missing, Assert.Single(songs, x => x.Title == "Missing audio").AudioState);
+        Assert.Equal(AudioPreviewState.Invalid, Assert.Single(songs, x => x.Title == "Invalid audio").AudioState);
+        Assert.All(songs, song => Assert.Equal(SongAvailability.Available, song.Availability));
+    }
+
     private sealed class LibraryFixture : IDisposable
     {
         private readonly SqliteConnection _writeConnection;
@@ -137,6 +167,7 @@ public sealed class RealLibraryReaderTests
             CustomSongs = Directory.CreateDirectory(Path.Combine(Root, "CustomSongs")).FullName;
             Playlists = Directory.CreateDirectory(Path.Combine(Root, "Playlist")).FullName;
             Images = Directory.CreateDirectory(Path.Combine(Root, "ImagesCache")).FullName;
+            TempAudio = Directory.CreateDirectory(Path.Combine(Root, "tempExt")).FullName;
             Favorites = Path.Combine(Root, "favorites.bin");
             Database = Path.Combine(Root, "SynthDB");
             _writeConnection = new(new SqliteConnectionStringBuilder { DataSource = Database, Pooling = false }.ToString());
@@ -150,6 +181,7 @@ public sealed class RealLibraryReaderTests
         public string CustomSongs { get; }
         public string Playlists { get; }
         public string Images { get; }
+        public string TempAudio { get; }
         public string Favorites { get; }
         public string Database { get; }
         public RealLibraryReader Reader { get; } = new();
@@ -177,11 +209,16 @@ public sealed class RealLibraryReaderTests
             var payload = new { namePlaylist = name, dataString = entries.Select(x => new { hash = x.Hash, name = x.Name, author = x.Artist, beatmapper = x.Mapper, trackDuration = 180 }).ToArray() };
             File.WriteAllText(Path.Combine(Playlists, $"{name}.playlist"), JsonSerializer.Serialize(payload));
         }
+        public void WriteOgg(string synthFileName, string oggFileName, bool valid)
+        {
+            var directory = Directory.CreateDirectory(Path.Combine(TempAudio, synthFileName)).FullName;
+            File.WriteAllBytes(Path.Combine(directory, oggFileName), valid ? "OggSfixture"u8.ToArray() : "bad!"u8.ToArray());
+        }
         public EnvironmentDiscoveryResult Environment(DataLocationStatus customStatus = DataLocationStatus.Available, DataLocationStatus imageStatus = DataLocationStatus.Available)
         {
             var now = DateTimeOffset.Now;
             DataLocation At(DataLocationKind kind, string path, DataLocationStatus status = DataLocationStatus.Available) => new(kind, path, DataLocationSource.Derived, status, now, "fixture", false);
-            return new([At(DataLocationKind.SynthDatabase, Database), At(DataLocationKind.CustomSongs, CustomSongs, customStatus), At(DataLocationKind.Playlists, Playlists), At(DataLocationKind.Favorites, Favorites), At(DataLocationKind.ImagesCache, Images, imageStatus)], "fixture", now);
+            return new([At(DataLocationKind.SynthDatabase, Database), At(DataLocationKind.CustomSongs, CustomSongs, customStatus), At(DataLocationKind.Playlists, Playlists), At(DataLocationKind.Favorites, Favorites), At(DataLocationKind.ImagesCache, Images, imageStatus), At(DataLocationKind.TempAudio, TempAudio)], "fixture", now);
         }
         private static void WriteBigEndian(byte[] bytes, int offset, int value) { bytes[offset] = (byte)(value >> 24); bytes[offset + 1] = (byte)(value >> 16); bytes[offset + 2] = (byte)(value >> 8); bytes[offset + 3] = (byte)value; }
         public void Dispose() { _writeConnection.Dispose(); Directory.Delete(Root, true); }

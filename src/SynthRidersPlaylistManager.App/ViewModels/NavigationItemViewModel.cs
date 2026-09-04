@@ -13,6 +13,7 @@ public enum NavigationFilter
     Custom,
     OfficialOrDlc,
     RecentlyAdded,
+    Blacklist,
     Playlist
 }
 

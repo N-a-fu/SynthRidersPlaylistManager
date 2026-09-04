@@ -27,6 +27,8 @@ public sealed class SongItemViewModel : ObservableObject
         CoverState = song.CoverState;
         CoverImagePath = song.CoverImagePath;
         CoverKey = song.CoverKey;
+        AudioState = song.AudioState;
+        AudioPreviewPath = song.AudioPreviewPath;
     }
 
     public SongIdentity Identity { get; }
@@ -43,6 +45,9 @@ public sealed class SongItemViewModel : ObservableObject
     public CoverArtState CoverState { get; }
     public string? CoverImagePath { get; }
     public string? CoverKey { get; }
+    public AudioPreviewState AudioState { get; }
+    public string? AudioPreviewPath { get; }
+    public bool HasAudioPreview => AudioState == AudioPreviewState.Available && AudioPreviewPath is not null;
     public bool HasCoverArt => CoverState == CoverArtState.Available && CoverImagePath is not null;
     public string CoverToolTip => CoverState switch
     {

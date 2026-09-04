@@ -14,5 +14,6 @@ public partial class MainWindow : Window
         var viewModel = new MainViewModel(new MockLibraryDataSource(), SteamEnvironmentDiscoveryService.CreateDefault(), new WindowsLocationPicker(), new RealLibraryReader());
         DataContext = viewModel;
         Loaded += async (_, _) => await viewModel.InitializeEnvironmentAsync();
+        Closed += (_, _) => viewModel.Dispose();
     }
 }

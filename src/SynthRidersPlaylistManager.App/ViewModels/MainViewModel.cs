@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 using SynthRidersPlaylistManager.App.Mvvm;
 using SynthRidersPlaylistManager.App.Services;
 using SynthRidersPlaylistManager.Core.Models;
@@ -10,12 +11,14 @@ using SynthRidersPlaylistManager.Core.Services;
 
 namespace SynthRidersPlaylistManager.App.ViewModels;
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private readonly ICollectionView _sourceSongsView;
     private readonly IEnvironmentDiscoveryService? _environmentDiscovery;
     private readonly ILocationPicker? _locationPicker;
     private readonly IRealLibraryReader? _realLibraryReader;
+    private readonly IAudioPreviewPlayer _audioPreviewPlayer;
+    private readonly DispatcherTimer _previewTimer;
     private NavigationItemViewModel? _selectedSourceNavigation;
     private NavigationItemViewModel? _selectedDestinationNavigation;
     private SongItemViewModel? _selectedSong;
@@ -23,28 +26,36 @@ public sealed class MainViewModel : ObservableObject
     private string _searchText = "", _playlistNameDraft = "", _statusMessage = "Phase 1.1 Follow-up — Mock data only";
     private bool _isSettingsOpen, _isMuted, _isPreviewPlaying, _hasMockChanges;
     private double _volume = 68;
+    private double _previewPositionSeconds, _previewDurationSeconds = 1;
+    private bool _updatingPreviewPosition;
+    private string? _loadedPreviewPath;
     private GameAccessState _gameState = GameAccessState.Stopped;
     private PaneSide _activePaneSide = PaneSide.A;
     private bool _isEnvironmentScanRunning;
     private bool _isRealDataMode;
     private string _installSummary = "環境検出待機中 — Phase 2A Read-only / Mock Library";
 
-    public MainViewModel() : this(new MockLibraryDataSource(), null, null, null) { }
-    public MainViewModel(ILibraryDataSource dataSource) : this(dataSource, null, null, null) { }
-    public MainViewModel(ILibraryDataSource dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker) : this(dataSource, environmentDiscovery, locationPicker, null) { }
-    public MainViewModel(ILibraryDataSource dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker, IRealLibraryReader? realLibraryReader)
+    public MainViewModel() : this(new MockLibraryDataSource(), null, null, null, null) { }
+    public MainViewModel(ILibraryDataSource dataSource) : this(dataSource, null, null, null, null) { }
+    public MainViewModel(ILibraryDataSource dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker) : this(dataSource, environmentDiscovery, locationPicker, null, null) { }
+    public MainViewModel(ILibraryDataSource dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker, IRealLibraryReader? realLibraryReader, IAudioPreviewPlayer? audioPreviewPlayer = null)
     {
         ArgumentNullException.ThrowIfNull(dataSource);
         _environmentDiscovery = environmentDiscovery;
         _locationPicker = locationPicker;
         _realLibraryReader = realLibraryReader;
+        _audioPreviewPlayer = audioPreviewPlayer ?? new AudioPreviewPlayer();
+        _audioPreviewPlayer.Volume = (float)(_volume / 100);
+        _audioPreviewPlayer.PlaybackStateChanged += OnPlaybackStateChanged;
+        _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _previewTimer.Tick += (_, _) => UpdatePreviewPosition();
         Songs = new(dataSource.GetSongs().Select(x => new SongItemViewModel(x)));
         foreach (var song in Songs) song.PropertyChanged += OnSongPropertyChanged;
         Playlists = new(dataSource.GetPlaylists());
         DestinationSongs = [];
         FavoritesNavigation = [new("すべてのお気に入り", NavigationFilter.Favorites), new("未整理", NavigationFilter.UnsortedFavorites), new("Playlist登録済み", NavigationFilter.AssignedFavorites)];
         PlaylistNavigation = new(Playlists.Select(x => new NavigationItemViewModel(x.Name, NavigationFilter.Playlist, x.Name, x.SongCount)));
-        SmartNavigation = [new("すべての曲", NavigationFilter.AllSongs), new("未登録", NavigationFilter.Unassigned), new("複数Playlist", NavigationFilter.MultiplePlaylists), new("Custom", NavigationFilter.Custom), new("Official / DLC", NavigationFilter.OfficialOrDlc), new("最近追加", NavigationFilter.RecentlyAdded)];
+        SmartNavigation = [new("すべての曲", NavigationFilter.AllSongs), new("未登録", NavigationFilter.Unassigned), new("複数Playlist", NavigationFilter.MultiplePlaylists), new("Custom", NavigationFilter.Custom), new("Official / DLC", NavigationFilter.OfficialOrDlc), new("最近追加", NavigationFilter.RecentlyAdded), new("ブラックリスト", NavigationFilter.Blacklist)];
         _sourceSongsView = CollectionViewSource.GetDefaultView(Songs);
         _sourceSongsView.Filter = FilterSourceSong;
 
@@ -76,7 +87,7 @@ public sealed class MainViewModel : ObservableObject
         RescanCommand = new RelayCommand(() => _ = RefreshEnvironmentAsync(), () => _environmentDiscovery is not null && !IsEnvironmentScanRunning);
         BrowseLocationCommand = new RelayCommand<EnvironmentLocationViewModel>(location => _ = BrowseLocationAsync(location), _ => _environmentDiscovery is not null && _locationPicker is not null && !IsEnvironmentScanRunning);
         ToggleGameStateCommand = new RelayCommand(ToggleGameState);
-        TogglePreviewCommand = new RelayCommand(() => IsPreviewPlaying = !IsPreviewPlaying, () => !IsRealDataMode);
+        TogglePreviewCommand = new RelayCommand(TogglePreview, () => CanPreviewSelectedSong);
         ToggleMuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
         SaveChangesCommand = new RelayCommand(() => SetStatusMessage("Mock Changesのみ — 実保存は無効です"));
         PaneA.SelectedCollection = FavoritesNavigation[1];
@@ -163,6 +174,19 @@ public sealed class MainViewModel : ObservableObject
     public bool IsValidRename => IsValidNewPlaylistName || string.Equals(SelectedDestinationNavigation?.PlaylistName, PlaylistNameDraft.Trim(), StringComparison.Ordinal);
     public string PreviewButtonGlyph => IsPreviewPlaying ? "❚❚" : "▶";
     public string MuteButtonGlyph => IsMuted ? "🔇" : "🔊";
+    public bool CanPreviewSelectedSong => SelectedSong?.HasAudioPreview == true;
+    public string PreviewAvailabilityText => SelectedSong?.AudioState switch
+    {
+        AudioPreviewState.Available => IsPreviewPlaying ? "再生中" : "Audio Preview",
+        AudioPreviewState.Invalid => "音声を読み取れません — Placeholder",
+        AudioPreviewState.ParentLocationUnavailable => "Audio保存先を利用できません",
+        AudioPreviewState.Unknown => "Audio状態を確認できません",
+        _ => SelectedSong?.Identity.Kind == SongKind.Custom
+            ? "この曲はまだプレビューできません。ゲーム内で一度プレビュー後、再スキャンしてください。"
+            : "この曲のAudio Previewは利用できません。"
+    };
+    public string PreviewElapsedDisplay => FormatTime(TimeSpan.FromSeconds(PreviewPositionSeconds));
+    public string PreviewDurationDisplay => FormatTime(TimeSpan.FromSeconds(PreviewDurationSeconds));
     public string GameStateDisplay => IsRealDataMode ? "REAL DATA · READ ONLY" : GameState == GameAccessState.RunningReadOnly ? "GAME RUNNING · READ ONLY" : "GAME STOPPED · MOCK EDITING";
     public bool IsReadOnly => IsRealDataMode || GameState != GameAccessState.Stopped;
     public string ChangeStateDisplay => IsRealDataMode ? "実データ接続済み · 書込無効" : HasMockChanges ? "● Mock Changes · not saved" : "No Changes · Mock data only";
@@ -174,15 +198,27 @@ public sealed class MainViewModel : ObservableObject
     public NavigationItemViewModel? SelectedNavigation { get => SelectedSourceNavigation; set => SelectedSourceNavigation = value; }
     public NavigationItemViewModel? SelectedSourceNavigation { get => _selectedSourceNavigation; set { if (PaneA.SelectedCollection != value) PaneA.SelectedCollection = value; else ApplyPaneCollection(PaneA, value); } }
     public NavigationItemViewModel? SelectedDestinationNavigation { get => _selectedDestinationNavigation; set { if (PaneB.SelectedCollection != value) PaneB.SelectedCollection = value; else ApplyPaneCollection(PaneB, value); } }
-    public SongItemViewModel? SelectedSong { get => _selectedSong; set { if (SetProperty(ref _selectedSong, value)) OnPropertyChanged(nameof(HasSelectedSong)); } }
+    public SongItemViewModel? SelectedSong { get => _selectedSong; set { if (SetProperty(ref _selectedSong, value)) { ResetPreviewForSelection(); Changed(nameof(HasSelectedSong), nameof(CanPreviewSelectedSong), nameof(PreviewAvailabilityText)); ((RelayCommand)TogglePreviewCommand).RaiseCanExecuteChanged(); } } }
     public NavigationItemViewModel? PendingDeletePlaylist { get => _pendingDeletePlaylist; private set { if (SetProperty(ref _pendingDeletePlaylist, value)) { OnPropertyChanged(nameof(IsDeleteConfirmationOpen)); _confirmDelete.RaiseCanExecuteChanged(); } } }
     public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) RefreshSourceFilter(); } }
     public string PlaylistNameDraft { get => _playlistNameDraft; set { if (SetProperty(ref _playlistNameDraft, value)) { _createPlaylist.RaiseCanExecuteChanged(); _renamePlaylist.RaiseCanExecuteChanged(); } } }
     public bool IsSettingsOpen { get => _isSettingsOpen; set => SetProperty(ref _isSettingsOpen, value); }
-    public bool IsMuted { get => _isMuted; set { if (SetProperty(ref _isMuted, value)) OnPropertyChanged(nameof(MuteButtonGlyph)); } }
-    public double Volume { get => _volume; set => SetProperty(ref _volume, value); }
+    public bool IsMuted { get => _isMuted; set { if (SetProperty(ref _isMuted, value)) { ApplyPlayerVolume(); OnPropertyChanged(nameof(MuteButtonGlyph)); } } }
+    public double Volume { get => _volume; set { if (SetProperty(ref _volume, Math.Clamp(value, 0, 100))) ApplyPlayerVolume(); } }
     public GameAccessState GameState { get => _gameState; set { if (SetProperty(ref _gameState, value)) { Changed(nameof(GameStateDisplay), nameof(IsReadOnly), nameof(CanManagePlaylists)); RaiseCommandStates(); } } }
-    public bool IsPreviewPlaying { get => _isPreviewPlaying; set { if (SetProperty(ref _isPreviewPlaying, value)) OnPropertyChanged(nameof(PreviewButtonGlyph)); } }
+    public bool IsPreviewPlaying { get => _isPreviewPlaying; private set { if (SetProperty(ref _isPreviewPlaying, value)) Changed(nameof(PreviewButtonGlyph), nameof(PreviewAvailabilityText)); } }
+    public double PreviewPositionSeconds
+    {
+        get => _previewPositionSeconds;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, PreviewDurationSeconds);
+            if (!SetProperty(ref _previewPositionSeconds, clamped)) return;
+            OnPropertyChanged(nameof(PreviewElapsedDisplay));
+            if (!_updatingPreviewPosition && _loadedPreviewPath is not null) _audioPreviewPlayer.Seek(TimeSpan.FromSeconds(clamped));
+        }
+    }
+    public double PreviewDurationSeconds { get => _previewDurationSeconds; private set { if (SetProperty(ref _previewDurationSeconds, Math.Max(1, value))) OnPropertyChanged(nameof(PreviewDurationDisplay)); } }
     public bool IsEnvironmentScanRunning
     {
         get => _isEnvironmentScanRunning;
@@ -320,6 +356,79 @@ public sealed class MainViewModel : ObservableObject
     private void RaiseDestinationState() { Changed(nameof(IsSamePlaylist), nameof(SamePlaylistDisplay), nameof(CanEditDestination), nameof(CanBulkAdd), nameof(CanBulkMove)); RaiseCommandStates(); }
     private void RaiseCommandStates() { _toggleFavorite.RaiseCanExecuteChanged(); _dropSongs.RaiseCanExecuteChanged(); _bulkAdd.RaiseCanExecuteChanged(); _bulkMove.RaiseCanExecuteChanged(); _favoriteOn.RaiseCanExecuteChanged(); _favoriteOff.RaiseCanExecuteChanged(); _createPlaylist.RaiseCanExecuteChanged(); _renamePlaylist.RaiseCanExecuteChanged(); _duplicatePlaylist.RaiseCanExecuteChanged(); _requestDelete.RaiseCanExecuteChanged(); _confirmDelete.RaiseCanExecuteChanged(); }
     private void ToggleGameState() => GameState = GameState == GameAccessState.RunningReadOnly ? GameAccessState.Stopped : GameAccessState.RunningReadOnly;
+    private void TogglePreview()
+    {
+        if (!CanPreviewSelectedSong || SelectedSong?.AudioPreviewPath is not string path) return;
+        try
+        {
+            if (IsPreviewPlaying)
+            {
+                _audioPreviewPlayer.Pause();
+                IsPreviewPlaying = false;
+                _previewTimer.Stop();
+                return;
+            }
+
+            if (!string.Equals(_loadedPreviewPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                _audioPreviewPlayer.Load(path);
+                _loadedPreviewPath = path;
+                PreviewDurationSeconds = _audioPreviewPlayer.Duration.TotalSeconds;
+                PreviewPositionSeconds = 0;
+            }
+            _audioPreviewPlayer.Play();
+            IsPreviewPlaying = true;
+            _previewTimer.Start();
+        }
+        catch (Exception)
+        {
+            StopPreview();
+            SetStatusMessage("Audio Previewを開始できませんでした。曲情報とゲームデータは変更していません。");
+        }
+    }
+
+    private void ResetPreviewForSelection()
+    {
+        StopPreview();
+        PreviewDurationSeconds = SelectedSong?.Duration?.TotalSeconds ?? 1;
+        PreviewPositionSeconds = 0;
+    }
+
+    private void StopPreview()
+    {
+        _previewTimer?.Stop();
+        _audioPreviewPlayer.Stop();
+        _loadedPreviewPath = null;
+        IsPreviewPlaying = false;
+    }
+
+    private void UpdatePreviewPosition()
+    {
+        _updatingPreviewPosition = true;
+        try { PreviewPositionSeconds = _audioPreviewPlayer.Position.TotalSeconds; }
+        finally { _updatingPreviewPosition = false; }
+        if (!_audioPreviewPlayer.IsPlaying)
+        {
+            IsPreviewPlaying = false;
+            _previewTimer.Stop();
+        }
+    }
+
+    private void OnPlaybackStateChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess()) dispatcher.BeginInvoke(UpdatePlaybackState);
+        else UpdatePlaybackState();
+    }
+
+    private void UpdatePlaybackState()
+    {
+        IsPreviewPlaying = _audioPreviewPlayer.IsPlaying;
+        if (!IsPreviewPlaying) _previewTimer.Stop();
+    }
+
+    private void ApplyPlayerVolume() => _audioPreviewPlayer.Volume = IsMuted ? 0 : (float)(Volume / 100);
+    private static string FormatTime(TimeSpan value) => $"{(int)value.TotalMinutes}:{value.Seconds:00}";
     private async Task RefreshEnvironmentAsync()
     {
         if (_environmentDiscovery is null || IsEnvironmentScanRunning) return;
@@ -413,4 +522,10 @@ public sealed class MainViewModel : ObservableObject
     private void MarkChanged() => HasMockChanges = true;
     private void SetStatusMessage(string value) => StatusMessage = value;
     private void Changed(params string[] names) { foreach (var name in names) OnPropertyChanged(name); }
+    public void Dispose()
+    {
+        _previewTimer.Stop();
+        _audioPreviewPlayer.PlaybackStateChanged -= OnPlaybackStateChanged;
+        _audioPreviewPlayer.Dispose();
+    }
 }
