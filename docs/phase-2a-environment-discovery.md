@@ -73,15 +73,15 @@ The existing main layout is unchanged. The right-side Settings panel shows all s
 
 ## Real environment read-only verification (2026-09-01)
 
-The built application was launched against the current machine. Steam metadata resolved App ID `885000` in a Steam library on drive `H:`. The exact observed development-machine paths are recorded here as research evidence only and are not defaults or fixtures:
+The built application was launched against a development machine. Steam metadata resolved App ID `885000` in a non-default Steam library. Machine-specific path prefixes have been redacted; these symbolic paths are research evidence only and are not defaults or fixtures:
 
-- Game Root: `<SteamLibrary>\steamapps\common\SynthRiders`
-- Playlists: `<SteamLibrary>\steamapps\common\SynthRiders\Playlist`
-- Favorites: `<SteamLibrary>\steamapps\common\SynthRiders\favorites.bin`
-- Custom Songs: `<SteamLibrary>\steamapps\common\SynthRiders\SynthRidersUC\CustomSongs`
-- SynthDB: `<SteamLibrary>\steamapps\common\SynthRiders\SynthRidersUC\SynthDB`
-- ImagesCache: `<SteamLibrary>\steamapps\common\SynthRiders\SynthRidersUC\ImagesCache`
-- tempExt: `<SteamLibrary>\steamapps\common\SynthRiders\SynthRidersUC\tempExt`
+- Game Root: `<DetectedGameRoot>`
+- Playlists: `<DetectedGameRoot>\Playlist`
+- Favorites: `<DetectedGameRoot>\favorites.bin`
+- Custom Songs: `<DetectedGameRoot>\SynthRidersUC\CustomSongs`
+- SynthDB: `<DetectedGameRoot>\SynthRidersUC\SynthDB`
+- ImagesCache: `<DetectedGameRoot>\SynthRidersUC\ImagesCache`
+- tempExt: `<DetectedGameRoot>\SynthRidersUC\tempExt`
 
 All seven were shown as `Available`: game identity structure, `.playlist`, Favorites JSON shape, `.synth`, SQLite header, `.png`, and tempExt existence were confirmed read-only. This matches the Phase 0.5 observed structure. The application did not enumerate real songs into the main list and did not write to the installation.
 

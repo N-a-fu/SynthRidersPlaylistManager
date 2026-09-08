@@ -24,15 +24,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string? _playlistsPath;
     private readonly Dictionary<string, string> _playlistFilesByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAudioPreviewPlayer _audioPreviewPlayer;
+    private readonly UiSettingsStore _uiSettingsStore;
     private readonly DispatcherTimer _previewTimer;
     private readonly DispatcherTimer _gameStateTimer;
     private NavigationItemViewModel? _selectedSourceNavigation;
     private NavigationItemViewModel? _selectedDestinationNavigation;
     private SongItemViewModel? _selectedSong;
     private NavigationItemViewModel? _pendingDeletePlaylist;
-    private string _searchText = "", _playlistNameDraft = "", _statusMessage = "";
+    private string _searchText = "", _statusMessage = "";
     private bool _isSettingsOpen, _isMuted, _isPreviewPlaying;
-    private double _volume = 68;
+    private double _volume = 50;
     private double _previewPositionSeconds, _previewDurationSeconds = 1;
     private bool _updatingPreviewPosition;
     private string? _loadedPreviewPath;
@@ -43,25 +44,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _suppressLegacySelectionUpdate;
     private string _installSummary = "環境検出待機中";
 
-    public MainViewModel() : this(new MockLibraryDataSource(), null, null, null, null) { }
+    public MainViewModel() : this(null, null, null, null, null) { }
     public MainViewModel(ILibraryDataSource dataSource) : this(dataSource, null, null, null, null) { }
     public MainViewModel(ILibraryDataSource dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker) : this(dataSource, environmentDiscovery, locationPicker, null, null) { }
-    public MainViewModel(ILibraryDataSource dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker, IRealLibraryReader? realLibraryReader, IAudioPreviewPlayer? audioPreviewPlayer = null, ISongFlagsStore? songFlagsStore = null, IPlaylistStore? playlistStore = null)
+    public MainViewModel(ILibraryDataSource? dataSource, IEnvironmentDiscoveryService? environmentDiscovery, ILocationPicker? locationPicker, IRealLibraryReader? realLibraryReader, IAudioPreviewPlayer? audioPreviewPlayer = null, ISongFlagsStore? songFlagsStore = null, IPlaylistStore? playlistStore = null, UiSettingsStore? uiSettingsStore = null)
     {
-        ArgumentNullException.ThrowIfNull(dataSource);
         _environmentDiscovery = environmentDiscovery;
         _locationPicker = locationPicker;
         _realLibraryReader = realLibraryReader;
         _songFlagsStore = songFlagsStore;
         _playlistStore = playlistStore;
+        _uiSettingsStore = uiSettingsStore ?? UiSettingsStore.CreateDefault();
+        _volume = Math.Clamp(_uiSettingsStore.Load().Volume ?? 50, 0, 100);
         _audioPreviewPlayer = audioPreviewPlayer ?? new AudioPreviewPlayer();
         _audioPreviewPlayer.Volume = (float)(_volume / 100);
         _audioPreviewPlayer.PlaybackStateChanged += OnPlaybackStateChanged;
         _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _previewTimer.Tick += (_, _) => UpdatePreviewPosition();
-        Songs = new(dataSource.GetSongs().Select(x => new SongItemViewModel(x)));
+        Songs = new((dataSource?.GetSongs() ?? []).Select(x => new SongItemViewModel(x)));
         foreach (var song in Songs) song.PropertyChanged += OnSongPropertyChanged;
-        Playlists = new(dataSource.GetPlaylists());
+        Playlists = new(dataSource?.GetPlaylists() ?? []);
         foreach (var playlist in Playlists) _playlistFilesByName[playlist.Name] = playlist.Id;
         DestinationSongs = [];
         FavoritesNavigation = [new(LocalizedNavigationLabel(NavigationFilter.Favorites), NavigationFilter.Favorites), new(LocalizedNavigationLabel(NavigationFilter.UnsortedFavorites), NavigationFilter.UnsortedFavorites), new(LocalizedNavigationLabel(NavigationFilter.AssignedFavorites), NavigationFilter.AssignedFavorites)];
@@ -80,8 +82,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ClearSourceSelectionCommand = new RelayCommand(() => SetChecks(Songs, true, false));
         SelectAllDestinationCommand = new RelayCommand(() => SetDestinationChecks(true));
         ClearDestinationSelectionCommand = new RelayCommand(() => SetChecks(DestinationSongs, false, false));
-        CreatePlaylistCommand = _createPlaylist = new(CreatePlaylist, () => CanManagePlaylists && IsValidNewPlaylistName);
-        RenamePlaylistCommand = _renamePlaylist = new(RenameSelectedPlaylist, () => CanManagePlaylists && SelectedDestinationNavigation is not null && IsValidRename);
         RequestDeletePlaylistCommand = _requestDelete = new RelayCommand<NavigationItemViewModel>(x => PendingDeletePlaylist = x, _ => CanManagePlaylists);
         ConfirmDeletePlaylistCommand = _confirmDelete = new(ConfirmDeletePlaylist, () => CanManagePlaylists && PendingDeletePlaylist is not null);
         CancelDeletePlaylistCommand = new RelayCommand(() => PendingDeletePlaylist = null);
@@ -91,6 +91,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         foreach (var playlist in PlaylistNavigation) ConfigurePlaylistCommands(playlist);
         PaneA = new CollectionPaneViewModel(this, PaneSide.A);
         PaneB = new CollectionPaneViewModel(this, PaneSide.B);
+        CreatePlaylistCommand = PaneB.CreatePlaylistCommand;
+        RenamePlaylistCommand = PaneB.RenamePlaylistCommand;
         OpenSettingsCommand = new RelayCommand(() => IsSettingsOpen = true);
         CloseSettingsCommand = new RelayCommand(() => IsSettingsOpen = false);
         ToggleLanguageCommand = new RelayCommand(ToggleLanguage);
@@ -109,7 +111,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private readonly RelayCommand<SongItemViewModel> _toggleFavorite;
     private readonly RelayCommand<SongDragPayload> _dropSongs;
-    private readonly RelayCommand _bulkAdd, _favoriteOn, _favoriteOff, _createPlaylist, _renamePlaylist, _confirmDelete;
+    private readonly RelayCommand _bulkAdd, _favoriteOn, _favoriteOff, _confirmDelete;
     private readonly RelayCommand<NavigationItemViewModel> _requestDelete;
     public ObservableCollection<SongItemViewModel> Songs { get; }
     public ObservableCollection<SongItemViewModel> DestinationSongs { get; }
@@ -179,9 +181,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool CanEditDestination => CanManagePlaylists && SelectedDestinationNavigation?.PlaylistName is not null && !IsSamePlaylist;
     public bool CanBulkAdd => HasSourceSelection && CanEditDestination;
     public bool CanBulkFavorite => CanSetFavorites(SourceCheckedSongs.Concat(DestinationCheckedSongs).Distinct().ToArray());
-    public bool CanManagePlaylists => GameState == GameAccessState.Stopped && !IsEnvironmentScanRunning && (!IsRealDataMode || (_playlistsPath is not null && _playlistStore?.IsGameStopped == true));
-    public bool IsValidNewPlaylistName => IsSafePlaylistName(PlaylistNameDraft) && !PlaylistNavigation.Any(x => string.Equals(x.PlaylistName, PlaylistNameDraft.Trim(), StringComparison.OrdinalIgnoreCase));
-    public bool IsValidRename => IsValidNewPlaylistName || string.Equals(SelectedDestinationNavigation?.PlaylistName, PlaylistNameDraft.Trim(), StringComparison.Ordinal);
+    public bool CanManagePlaylists => IsRealDataMode && GameState == GameAccessState.Stopped && !IsEnvironmentScanRunning && _playlistsPath is not null && _playlistStore?.IsGameStopped == true;
+    public bool IsValidNewPlaylistName => IsValidNewPlaylistNameFor(PaneB);
+    public bool IsValidRename => IsValidRenameFor(PaneB);
     public string PreviewButtonGlyph => IsPreviewPlaying ? "❚❚" : "▶";
     public string MuteButtonGlyph => IsMuted ? "🔇" : "🔊";
     public bool CanPreviewSelectedSong => SelectedSong?.HasAudioPreview == true;
@@ -210,10 +212,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public SongItemViewModel? SelectedSong { get => _selectedSong; set { if (SetProperty(ref _selectedSong, value)) { ResetPreviewForSelection(); Changed(nameof(HasSelectedSong), nameof(SelectedSongTitleDisplay), nameof(CanPreviewSelectedSong), nameof(PreviewAvailabilityText)); ((RelayCommand)TogglePreviewCommand).RaiseCanExecuteChanged(); } } }
     public NavigationItemViewModel? PendingDeletePlaylist { get => _pendingDeletePlaylist; private set { if (SetProperty(ref _pendingDeletePlaylist, value)) { OnPropertyChanged(nameof(IsDeleteConfirmationOpen)); _confirmDelete.RaiseCanExecuteChanged(); } } }
     public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) RefreshSourceFilter(); } }
-    public string PlaylistNameDraft { get => _playlistNameDraft; set { if (SetProperty(ref _playlistNameDraft, value)) { _createPlaylist.RaiseCanExecuteChanged(); _renamePlaylist.RaiseCanExecuteChanged(); } } }
+    public string PlaylistNameDraft { get => PaneB.PlaylistNameDraft; set => PaneB.PlaylistNameDraft = value; }
     public bool IsSettingsOpen { get => _isSettingsOpen; set => SetProperty(ref _isSettingsOpen, value); }
     public bool IsMuted { get => _isMuted; set { if (SetProperty(ref _isMuted, value)) { ApplyPlayerVolume(); OnPropertyChanged(nameof(MuteButtonGlyph)); } } }
-    public double Volume { get => _volume; set { if (SetProperty(ref _volume, Math.Clamp(value, 0, 100))) ApplyPlayerVolume(); } }
+    public double Volume { get => _volume; set { if (SetProperty(ref _volume, Math.Clamp(value, 0, 100))) { ApplyPlayerVolume(); _uiSettingsStore.Save(_uiSettingsStore.Load() with { Volume = _volume }); } } }
     public GameAccessState GameState { get => _gameState; set { if (SetProperty(ref _gameState, value)) { Changed(nameof(GameStateDisplay), nameof(ChangeStateDisplay), nameof(IsReadOnly), nameof(IsDragDropEnabled), nameof(CanManagePlaylists)); RaiseCommandStates(); PaneA.RaiseCommands(); PaneB.RaiseCommands(); } } }
     public bool IsPreviewPlaying { get => _isPreviewPlaying; private set { if (SetProperty(ref _isPreviewPlaying, value)) Changed(nameof(PreviewButtonGlyph), nameof(PreviewAvailabilityText)); } }
     public double PreviewPositionSeconds
@@ -299,7 +301,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var selected = pane.CheckedSongs.Where(song => song.PlaylistNames.Contains(playlistName, StringComparer.OrdinalIgnoreCase)).ToArray();
         try
         {
-            if (IsRealDataMode && selected.Length > 0) _playlistStore!.RemoveSongs(_playlistsPath!, PlaylistFileName(playlistName), selected.Select(song => song.Identity.StableId).ToArray());
+            if (selected.Length > 0) _playlistStore!.RemoveSongs(_playlistsPath!, PlaylistFileName(playlistName), selected.Select(song => song.Identity.StableId).ToArray());
         }
         catch (Exception) { SetStatusMessage("Playlistからの削除保存に失敗しました。元データは維持されています。"); return; }
         var removed = pane.CheckedSongs.Count(song => song.RemovePlaylist(playlistName));
@@ -359,7 +361,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var additions = songs.Where(song => !song.PlaylistNames.Contains(name, StringComparer.OrdinalIgnoreCase)).ToArray();
         try
         {
-            if (IsRealDataMode && additions.Length > 0) _playlistStore!.AddSongs(_playlistsPath!, PlaylistFileName(name), additions.Select(ToPlaylistWriteSong).ToArray());
+            if (additions.Length > 0) _playlistStore!.AddSongs(_playlistsPath!, PlaylistFileName(name), additions.Select(ToPlaylistWriteSong).ToArray());
         }
         catch (Exception) { SetStatusMessage("Playlistへの保存に失敗しました。元データは維持されています。"); return; }
         foreach (var song in songs) { if (song.AddPlaylist(name)) added++; else duplicates++; }
@@ -426,30 +428,35 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     private static bool? CheckState(IEnumerable<SongItemViewModel> songs, bool source) { var rows = songs.ToArray(); if (rows.Length == 0) return false; var count = rows.Count(x => source ? x.IsSourceChecked : x.IsDestinationChecked); return count == 0 ? false : count == rows.Length ? true : null; }
 
-    private void CreatePlaylist()
+    public bool CanCreatePlaylist(CollectionPaneViewModel pane) => CanManagePlaylists && IsValidNewPlaylistNameFor(pane);
+    public bool CanRenamePlaylist(CollectionPaneViewModel pane) => CanManagePlaylists && pane.SelectedCollection?.Filter == NavigationFilter.Playlist && IsValidRenameFor(pane);
+    private bool IsValidNewPlaylistNameFor(CollectionPaneViewModel pane) => IsSafePlaylistName(pane.PlaylistNameDraft) && !PlaylistNavigation.Any(x => string.Equals(x.PlaylistName, pane.PlaylistNameDraft.Trim(), StringComparison.OrdinalIgnoreCase));
+    private bool IsValidRenameFor(CollectionPaneViewModel pane) => IsValidNewPlaylistNameFor(pane) || string.Equals(pane.SelectedCollection?.PlaylistName, pane.PlaylistNameDraft.Trim(), StringComparison.Ordinal);
+
+    public void CreatePlaylist(CollectionPaneViewModel pane)
     {
-        var name = PlaylistNameDraft.Trim(); if (!CanManagePlaylists || !IsValidNewPlaylistName) return;
+        var name = pane.PlaylistNameDraft.Trim(); if (!CanCreatePlaylist(pane)) return;
         PlaylistFileReference file;
-        try { file = IsRealDataMode ? _playlistStore!.Create(_playlistsPath!, name) : new($"mock-{Guid.NewGuid():N}", name); }
+        try { file = _playlistStore!.Create(_playlistsPath!, name); }
         catch (Exception) { SetStatusMessage("Playlistを作成できませんでした。名前と保存先を確認してください。"); return; }
         var item = new NavigationItemViewModel(file.Name, NavigationFilter.Playlist, file.Name, 0);
         ConfigurePlaylistCommands(item); PlaylistNavigation.Add(item); Playlists.Add(new(file.FileName, file.Name, 0)); _playlistFilesByName[file.Name] = file.FileName;
-        SelectedDestinationNavigation = item; PlaylistNameDraft = ""; Changed(nameof(PlaylistCount)); SetStatusMessage($"Playlist「{file.Name}」を作成しました");
+        pane.SelectedCollection = item; pane.PlaylistNameDraft = ""; Changed(nameof(PlaylistCount)); SetStatusMessage($"Playlist「{file.Name}」を作成しました");
     }
-    private void RenameSelectedPlaylist()
+    public void RenamePlaylist(CollectionPaneViewModel pane)
     {
-        var item = SelectedDestinationNavigation; if (!CanManagePlaylists || item?.PlaylistName is null || !IsValidRename) return; var old = item.PlaylistName; var name = PlaylistNameDraft.Trim(); if (old == name) return;
+        var item = pane.SelectedCollection; if (!CanRenamePlaylist(pane) || item?.PlaylistName is null) return; var old = item.PlaylistName; var name = pane.PlaylistNameDraft.Trim(); if (old == name) return;
         PlaylistFileReference file;
-        try { file = IsRealDataMode ? _playlistStore!.Rename(_playlistsPath!, PlaylistFileName(old), name) : new(PlaylistFileName(old), name); }
+        try { file = _playlistStore!.Rename(_playlistsPath!, PlaylistFileName(old), name); }
         catch (Exception) { SetStatusMessage("Playlist名を変更できませんでした。既存名との衝突を確認してください。"); return; }
         foreach (var song in Songs) song.RenamePlaylist(old, file.Name); var i = Playlists.ToList().FindIndex(x => x.Name == old); if (i >= 0) Playlists[i] = Playlists[i] with { Id = file.FileName, Name = file.Name };
         _playlistFilesByName.Remove(old); _playlistFilesByName[file.Name] = file.FileName;
-        item.Label = file.Name; item.PlaylistName = file.Name; PlaylistNameDraft = file.Name; Changed(nameof(DestinationPlaylistName)); RefreshBothPanes(); SetStatusMessage($"{old} を {file.Name} へ名前変更しました");
+        item.Label = file.Name; item.PlaylistName = file.Name; pane.PlaylistNameDraft = ""; Changed(nameof(DestinationPlaylistName)); RefreshBothPanes(); SetStatusMessage($"{old} を {file.Name} へ名前変更しました");
     }
     private void ConfirmDeletePlaylist()
     {
         var item = PendingDeletePlaylist; if (!CanManagePlaylists || item?.PlaylistName is null) return; var name = item.PlaylistName;
-        try { if (IsRealDataMode) _playlistStore!.Delete(_playlistsPath!, PlaylistFileName(name)); }
+        try { _playlistStore!.Delete(_playlistsPath!, PlaylistFileName(name)); }
         catch (Exception) { PendingDeletePlaylist = null; SetStatusMessage("Playlistを削除できませんでした。元データは維持されています。"); return; }
         foreach (var song in Songs) song.RemovePlaylist(name); PlaylistNavigation.Remove(item); var summary = Playlists.FirstOrDefault(x => x.Name == name); if (summary is not null) Playlists.Remove(summary);
         _playlistFilesByName.Remove(name);
@@ -495,7 +502,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     private void RaiseSelectionState() { Changed(nameof(SourceSelectedCount), nameof(VisibleSourceSelectedCount), nameof(DestinationSelectedCount), nameof(SourceSelectionDisplay), nameof(DestinationSelectionDisplay), nameof(HasSourceSelection), nameof(HasDestinationSelection), nameof(AreAllVisibleSourceChecked), nameof(AreAllDestinationChecked), nameof(CanBulkAdd), nameof(CanBulkFavorite)); RaiseCommandStates(); }
     private void RaiseDestinationState() { Changed(nameof(IsSamePlaylist), nameof(SamePlaylistDisplay), nameof(CanEditDestination), nameof(CanBulkAdd)); RaiseCommandStates(); }
-    private void RaiseCommandStates() { _toggleFavorite.RaiseCanExecuteChanged(); _dropSongs.RaiseCanExecuteChanged(); _bulkAdd.RaiseCanExecuteChanged(); _favoriteOn.RaiseCanExecuteChanged(); _favoriteOff.RaiseCanExecuteChanged(); _createPlaylist.RaiseCanExecuteChanged(); _renamePlaylist.RaiseCanExecuteChanged(); _requestDelete.RaiseCanExecuteChanged(); _confirmDelete.RaiseCanExecuteChanged(); }
+    private void RaiseCommandStates() { _toggleFavorite.RaiseCanExecuteChanged(); _dropSongs.RaiseCanExecuteChanged(); _bulkAdd.RaiseCanExecuteChanged(); _favoriteOn.RaiseCanExecuteChanged(); _favoriteOff.RaiseCanExecuteChanged(); PaneA.RaiseCommands(); PaneB.RaiseCommands(); _requestDelete.RaiseCanExecuteChanged(); _confirmDelete.RaiseCanExecuteChanged(); }
     private void ToggleGameState() => GameState = GameState == GameAccessState.RunningReadOnly ? GameAccessState.Stopped : GameAccessState.RunningReadOnly;
     private void ToggleLanguage()
     {

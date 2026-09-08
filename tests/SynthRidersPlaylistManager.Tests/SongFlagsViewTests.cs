@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,26 +8,22 @@ using SynthRidersPlaylistManager.Core.Models;
 
 namespace SynthRidersPlaylistManager.Tests;
 
-public sealed class SongFlagsViewTests
+[Collection(WpfTestCollection.Name)]
+public sealed class SongFlagsViewTests(WpfTestFixture wpf)
 {
     [Fact]
     public void ProductionViewDimsOnlyInformationAndHeartDoesNotSelectOrCheck()
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
+        wpf.Run(() =>
         {
-            try
-            {
                 foreach (var paneA in new[] { true, false })
                 {
-                using var vm = new MainViewModel();
+                using var vm = new MainViewModel(new SynthRidersPlaylistManager.App.Services.MockLibraryDataSource());
                 var songs = vm.Songs.Where(s => s.Identity.Kind == SongKind.Custom).Take(2).ToArray();
                 foreach (var song in songs) song.IsBlacklisted = true;
                 var pane = paneA ? vm.PaneA : vm.PaneB;
                 pane.SelectedCollection = vm.SmartNavigation.Single(x => x.Filter == NavigationFilter.Blacklist);
-                var resources = new ResourceDictionary { Source = new Uri("/SynthRidersPlaylistManager.App;component/Resources/Theme.xaml", UriKind.Relative) };
-                resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/SynthRidersPlaylistManager.App;component/Resources/Strings.ja-JP.xaml", UriKind.Relative) });
-                var view = new CollectionBrowserView(resources) { DataContext = pane };
+                var view = new CollectionBrowserView { DataContext = pane };
                 view.Measure(new Size(900, 700)); view.Arrange(new Rect(0, 0, 900, 700)); view.UpdateLayout();
                 var blacklistMenu = Assert.Single(Descendants<Button>(view), b => b.DataContext is NavigationItemViewModel { Filter: NavigationFilter.Blacklist });
                 Assert.Equal(paneA ? Visibility.Visible : Visibility.Collapsed, blacklistMenu.Visibility);
@@ -76,11 +71,7 @@ public sealed class SongFlagsViewTests
                     Assert.Equal(paneA || collection.Filter != NavigationFilter.Blacklist, action.IsEnabled);
                 }
                 }
-            }
-            catch (Exception ex) { failure = ex; }
         });
-        thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
-        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     // The headless View has no shown Window, so inspect effective Visibility through

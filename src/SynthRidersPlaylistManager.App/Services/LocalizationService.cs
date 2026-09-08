@@ -4,7 +4,7 @@ using System.Windows;
 
 namespace SynthRidersPlaylistManager.App.Services;
 
-public sealed record UiSettings(string Language = "ja-JP");
+public sealed record UiSettings(string Language = "ja-JP", double? Volume = null);
 
 public sealed class UiSettingsStore(string path)
 {
@@ -34,9 +34,17 @@ public static class LocalizationService
         var normalized = string.Equals(language, "en-US", StringComparison.OrdinalIgnoreCase) ? "en-US" : "ja-JP";
         var dictionaries = Application.Current.Resources.MergedDictionaries;
         var existing = dictionaries.FirstOrDefault(d => d.Source?.OriginalString.Contains("Strings.", StringComparison.OrdinalIgnoreCase) == true);
-        var replacement = new ResourceDictionary { Source = new Uri($"/SynthRidersPlaylistManager.App;component/Resources/Strings.{normalized}.xaml", UriKind.Relative) };
+        var assemblyName = typeof(LocalizationService).Assembly.GetName().Name;
+        var replacement = new ResourceDictionary
+        {
+            Source = new Uri($"pack://application:,,,/{assemblyName};component/Resources/Strings.{normalized}.xaml", UriKind.Absolute)
+        };
         if (existing is null) dictionaries.Add(replacement); else dictionaries[dictionaries.IndexOf(existing)] = replacement;
         CurrentLanguage = normalized;
-        if (save) UiSettingsStore.CreateDefault().Save(new(normalized));
+        if (save)
+        {
+            var store = UiSettingsStore.CreateDefault();
+            store.Save(store.Load() with { Language = normalized });
+        }
     }
 }

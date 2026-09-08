@@ -15,6 +15,7 @@ public sealed class CollectionPaneViewModel : ObservableObject
     private readonly ICollectionView _songsView;
     private NavigationItemViewModel? _selectedCollection;
     private string _searchText = "";
+    private string _playlistNameDraft = "";
     private bool _isNavigatorOpen;
     private SongSortColumn? _sortColumn;
     private ListSortDirection? _sortDirection;
@@ -38,6 +39,8 @@ public sealed class CollectionPaneViewModel : ObservableObject
         FavoriteOffCommand = new RelayCommand(() => owner.SetPaneFavorites(this, false), () => owner.CanSetFavorites(CheckedSongs));
         RemoveBlacklistCommand = new RelayCommand(() => owner.RemovePaneBlacklist(this), () => owner.CanRemoveBlacklist(this));
         AddBlacklistCommand = new RelayCommand(() => owner.AddPaneBlacklist(this), () => SelectedCollection?.Filter != NavigationFilter.Blacklist && owner.CanSetBlacklist(this));
+        CreatePlaylistCommand = new RelayCommand(() => owner.CreatePlaylist(this), () => owner.CanCreatePlaylist(this));
+        RenamePlaylistCommand = new RelayCommand(() => owner.RenamePlaylist(this), () => owner.CanRenamePlaylist(this));
         UpdateSelectionSnapshot();
     }
 
@@ -58,6 +61,8 @@ public sealed class CollectionPaneViewModel : ObservableObject
     public ICommand FavoriteOffCommand { get; }
     public ICommand AddBlacklistCommand { get; }
     public ICommand RemoveBlacklistCommand { get; }
+    public ICommand CreatePlaylistCommand { get; }
+    public ICommand RenamePlaylistCommand { get; }
     public bool IsBlacklistRemovalView => Side == PaneSide.A && SelectedCollection?.Filter == NavigationFilter.Blacklist;
 
     private SongItemViewModel? _selectedSong;
@@ -70,9 +75,10 @@ public sealed class CollectionPaneViewModel : ObservableObject
     public NavigationItemViewModel? SelectedCollection
     {
         get => _selectedCollection;
-        set { if (SetProperty(ref _selectedCollection, value)) { Refresh(); _owner.OnPaneCollectionChanged(this); Changed(nameof(CollectionName), nameof(CollectionType), nameof(IsPlaylist), nameof(IsBlacklistRemovalView)); } }
+        set { if (SetProperty(ref _selectedCollection, value)) { Refresh(); _owner.OnPaneCollectionChanged(this); Changed(nameof(CollectionName), nameof(CollectionType), nameof(IsPlaylist), nameof(IsBlacklistRemovalView)); RaisePlaylistCommands(); } }
     }
     public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) Refresh(); } }
+    public string PlaylistNameDraft { get => _playlistNameDraft; set { if (SetProperty(ref _playlistNameDraft, value)) RaisePlaylistCommands(); } }
     public string CollectionName => SelectedCollection?.Label ?? "Collection未選択";
     public string CollectionType => MainViewModel.UiText(SelectedCollection?.Filter == NavigationFilter.Playlist ? "Nav.Playlists" : SelectedCollection?.Filter is NavigationFilter.Favorites or NavigationFilter.UnsortedFavorites or NavigationFilter.AssignedFavorites ? "Nav.Favorites" : "Nav.Filters");
     public bool IsPlaylist => SelectedCollection?.Filter == NavigationFilter.Playlist;
@@ -139,6 +145,7 @@ public sealed class CollectionPaneViewModel : ObservableObject
     public void RaiseCommands()
     {
         RaiseSelectionCommands();
+        RaisePlaylistCommands();
         Changed(nameof(CanReceiveDrop));
         ((RelayCommand<SongDragPayload>)DropCommand).RaiseCanExecuteChanged();
     }
@@ -149,6 +156,11 @@ public sealed class CollectionPaneViewModel : ObservableObject
         ((RelayCommand)FavoriteOnCommand).RaiseCanExecuteChanged(); ((RelayCommand)FavoriteOffCommand).RaiseCanExecuteChanged();
         ((RelayCommand)AddBlacklistCommand).RaiseCanExecuteChanged();
         ((RelayCommand)RemoveBlacklistCommand).RaiseCanExecuteChanged();
+    }
+    private void RaisePlaylistCommands()
+    {
+        ((RelayCommand)CreatePlaylistCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)RenamePlaylistCommand).RaiseCanExecuteChanged();
     }
     private bool FilterSong(object value)
     {

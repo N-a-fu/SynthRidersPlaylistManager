@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:SynthRidersPlaylistManager.App.Views"
-        Title="{DynamicResource App.Title}" Width="1580" Height="920" MinWidth="1100" MinHeight="680" WindowStartupLocation="CenterScreen">
+        Title="{DynamicResource App.Title}" Icon="/Assets/AppIcon.ico" Width="1580" Height="920" MinWidth="1100" MinHeight="680" WindowStartupLocation="CenterScreen">
     <Grid Background="{StaticResource Brush.Background}">
         <Grid.RowDefinitions><RowDefinition Height="112"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
 
@@ -49,7 +49,7 @@
                                     </Grid>
                                 </Border>
                             </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                            <TextBlock Text="{DynamicResource Settings.Volume}" Style="{StaticResource SectionLabel}"/><Slider Minimum="0" Maximum="100" Value="{Binding Volume}"/><CheckBox Content="{DynamicResource Settings.Mute}" IsChecked="{Binding IsMuted}" Foreground="{StaticResource Brush.Text}" Margin="0,8,0,0"/>
+                            <TextBlock Text="{DynamicResource Settings.Volume}" Style="{StaticResource SectionLabel}"/><Slider Minimum="0" Maximum="100" Value="{Binding Volume, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/><CheckBox Content="{DynamicResource Settings.Mute}" IsChecked="{Binding IsMuted}" Foreground="{StaticResource Brush.Text}" Margin="0,8,0,0"/>
                         </StackPanel>
                     </ScrollViewer>
                     <Button Grid.Row="2" Content="{DynamicResource Settings.Close}" Command="{Binding CloseSettingsCommand}" HorizontalAlignment="Right" Margin="0,14,0,0" Background="{StaticResource Brush.AccentDark}" MinWidth="96"/>

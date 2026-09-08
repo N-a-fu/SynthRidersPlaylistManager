@@ -8,6 +8,50 @@ namespace SynthRidersPlaylistManager.Tests;
 public sealed class PlaylistPersistenceViewModelTests
 {
     [Fact]
+    public async Task PlaylistDraftAndCrudAuthorityAreIsolatedPerPane()
+    {
+        var snapshot = new LibrarySnapshot([], [new("a.playlist", "Playlist A", 0), new("b.playlist", "Playlist B", 0)], [], [], new(0, 0, 0, 0, 0, 2, 0, 0, 0));
+        var now = DateTimeOffset.Now;
+        using var playlistDirectory = new TempDirectory();
+        var env = new EnvironmentDiscoveryResult([new(DataLocationKind.Playlists, playlistDirectory.Path, DataLocationSource.Derived, DataLocationStatus.Available, now, "fixture", false)], "fixture", now);
+        var store = new StoreStub();
+        using var vm = new MainViewModel(new MockLibraryDataSource(), new EnvironmentStub(env), null, new ReaderStub(snapshot), playlistStore: store);
+        await vm.InitializeEnvironmentAsync();
+
+        vm.PaneA.SelectedCollection = vm.PlaylistNavigation.Single(x => x.PlaylistName == "Playlist A");
+        vm.PaneB.SelectedCollection = vm.PlaylistNavigation.Single(x => x.PlaylistName == "Playlist B");
+
+        vm.PaneA.PlaylistNameDraft = "A Renamed";
+        Assert.Equal("", vm.PaneB.PlaylistNameDraft);
+        Assert.True(vm.PaneA.RenamePlaylistCommand.CanExecute(null));
+        Assert.False(vm.PaneB.RenamePlaylistCommand.CanExecute(null));
+        Assert.True(vm.PaneA.CreatePlaylistCommand.CanExecute(null));
+        Assert.False(vm.PaneB.CreatePlaylistCommand.CanExecute(null));
+        vm.PaneA.RenamePlaylistCommand.Execute(null);
+        Assert.Equal("A Renamed", vm.PaneA.SelectedCollection!.PlaylistName);
+        Assert.Equal("Playlist B", vm.PaneB.SelectedCollection!.PlaylistName);
+        Assert.Equal("", vm.PaneA.PlaylistNameDraft);
+        Assert.Equal("", vm.PaneB.PlaylistNameDraft);
+
+        vm.PaneA.PlaylistNameDraft = "A untouched";
+        vm.PaneB.PlaylistNameDraft = "B Renamed";
+        Assert.Equal("A untouched", vm.PaneA.PlaylistNameDraft);
+        Assert.True(vm.PaneB.RenamePlaylistCommand.CanExecute(null));
+        vm.PaneB.RenamePlaylistCommand.Execute(null);
+        Assert.Equal("A Renamed", vm.PaneA.SelectedCollection!.PlaylistName);
+        Assert.Equal("B Renamed", vm.PaneB.SelectedCollection!.PlaylistName);
+        Assert.Equal("A untouched", vm.PaneA.PlaylistNameDraft);
+        Assert.Equal("", vm.PaneB.PlaylistNameDraft);
+        Assert.Equal(["A Renamed", "B Renamed"], store.RenamedNames);
+
+        vm.PaneB.PlaylistNameDraft = "Failed Rename";
+        store.FailRename = true;
+        vm.PaneB.RenamePlaylistCommand.Execute(null);
+        Assert.Equal("Failed Rename", vm.PaneB.PlaylistNameDraft);
+        Assert.Equal("A untouched", vm.PaneA.PlaylistNameDraft);
+    }
+
+    [Fact]
     public async Task RealModeRoutesCreateRenameDropRemoveAndDeleteToPlaylistStore()
     {
         var hashA = new string('a', 64); var hashB = new string('b', 64);
@@ -56,8 +100,15 @@ public sealed class PlaylistPersistenceViewModelTests
         public IReadOnlyCollection<PlaylistWriteSong> Added { get; private set; } = [];
         public IReadOnlyCollection<string> Removed { get; private set; } = [];
         public string? Deleted { get; private set; }
+        public List<string> RenamedNames { get; } = [];
+        public bool FailRename { get; set; }
         public PlaylistFileReference Create(string directory, string name) => new("000006__newlist.playlist", name);
-        public PlaylistFileReference Rename(string directory, string fileName, string newName) => new("000006__renamedlist.playlist", newName);
+        public PlaylistFileReference Rename(string directory, string fileName, string newName)
+        {
+            if (FailRename) throw new System.IO.IOException("fixture failure");
+            RenamedNames.Add(newName);
+            return new(newName == "Renamed List" ? "000006__renamedlist.playlist" : fileName, newName);
+        }
         public void Delete(string directory, string fileName) => Deleted = fileName;
         public void AddSongs(string directory, string fileName, IReadOnlyCollection<PlaylistWriteSong> songs) => Added = songs;
         public void RemoveSongs(string directory, string fileName, IReadOnlyCollection<string> hashes) => Removed = hashes;

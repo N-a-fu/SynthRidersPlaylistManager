@@ -1,25 +1,19 @@
 using System.ComponentModel;
-using System.Runtime.ExceptionServices;
-using System.Windows;
 using SynthRidersPlaylistManager.App.Services;
 using SynthRidersPlaylistManager.App.ViewModels;
 
 namespace SynthRidersPlaylistManager.Tests;
 
-public sealed class LocalizationSwitchTests
+[Collection(WpfTestCollection.Name)]
+public sealed class LocalizationSwitchTests(WpfTestFixture wpf)
 {
     [Fact]
     public void SwitchesBothPanesImmediatelyPreservesStateAndPersistsLanguage()
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
+        wpf.Run(() =>
         {
-            try
-            {
-                var app = new SynthRidersPlaylistManager.App.App();
-                app.InitializeComponent();
                 LocalizationService.Apply("ja-JP", false);
-                using var vm = new MainViewModel();
+                using var vm = new MainViewModel(new MockLibraryDataSource());
                 var playlistA = vm.PlaylistNavigation.First();
                 var playlistB = vm.PlaylistNavigation.Last();
                 vm.PaneA.SelectedCollection = playlistA;
@@ -61,10 +55,6 @@ public sealed class LocalizationSwitchTests
                 Assert.NotNull(vm.PaneA.RemoveFromCurrentPlaylistCommand);
                 Assert.NotNull(vm.ToggleFavoriteCommand);
                 Assert.NotNull(vm.PaneA.AddBlacklistCommand);
-            }
-            catch (Exception ex) { failure = ex; }
         });
-        thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
-        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 }

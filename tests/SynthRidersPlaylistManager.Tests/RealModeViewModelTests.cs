@@ -26,7 +26,9 @@ public sealed class RealModeViewModelTests
         Assert.True(vm.IsRealDataMode);
         Assert.Equal(2, vm.Songs.Count);
         Assert.False(vm.CanManagePlaylists);
-        Assert.False(vm.IsDragDropEnabled);
+        Assert.True(vm.IsDragDropEnabled);
+        Assert.False(vm.PaneB.DropCommand.CanExecute(vm.PaneA.CreateDragPayload(vm.Songs[0])));
+        Assert.False(vm.PaneA.CreatePlaylistCommand.CanExecute(null));
         Assert.False(vm.ToggleFavoriteCommand.CanExecute(vm.Songs[0]));
         vm.PaneA.SearchText = "日本語artist";
         Assert.Single(vm.PaneA.VisibleSongs.Cast<object>());
@@ -60,7 +62,8 @@ public sealed class RealModeViewModelTests
         Assert.Same(song, Assert.Single(vm.PaneA.VisibleSongs.Cast<SongItemViewModel>()));
         Assert.True(song.IsFavorite);
         Assert.False(vm.CanManagePlaylists);
-        Assert.False(vm.IsDragDropEnabled);
+        Assert.True(vm.IsDragDropEnabled);
+        Assert.False(vm.PaneA.CreatePlaylistCommand.CanExecute(null));
         store.Fail = true;
         vm.PaneB.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.AllSongs);
         vm.PaneB.AddBlacklistCommand.Execute(null);
