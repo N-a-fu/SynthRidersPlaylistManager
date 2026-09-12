@@ -12,7 +12,7 @@ Windows向けの、Steam版 Synth Riders V3系用ローカルライブラリ／P
 
 - Dual Paneによるライブラリ／Playlist表示
 - Drag & DropによるPlaylistへの曲追加
-- Playlistの新規作成、名前変更、削除
+- Playlistの新規作成、名前変更（Playlistそのものの削除はSynth Ridersゲーム内で行ってください）
 - Playlistからの曲の削除
 - Favorite管理
 - Blacklist管理

@@ -8,7 +8,7 @@ public sealed class CollectionPaneSortingTests
     [Fact]
     public void SortCyclesThreeColumnsIndependentlyAndPreservesUnderlyingOrderAcrossFilterChanges()
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         var paneA = vm.PaneA;
         var paneB = vm.PaneB;
         var original = vm.Songs.ToArray();

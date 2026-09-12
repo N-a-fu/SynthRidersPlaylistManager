@@ -15,7 +15,7 @@ public sealed class SongDragDropBehaviorTests
     {
         RunSta(() =>
         {
-            var vm = new MainViewModel();
+        var vm = ProductionViewModelFixture.Create();
             var expected = vm.PaneB.VisibleSongs.Cast<SongItemViewModel>().First();
             var grid = new DataGrid { SelectedItem = null };
             var row = new DataGridRow { Item = expected };
@@ -32,7 +32,7 @@ public sealed class SongDragDropBehaviorTests
     {
         RunSta(() =>
         {
-            var vm = new MainViewModel();
+        var vm = ProductionViewModelFixture.Create();
             var paneAGrid = new DataGrid { DataContext = vm.PaneA };
             var paneBGrid = new DataGrid { DataContext = vm.PaneB };
 
@@ -53,7 +53,7 @@ public sealed class SongDragDropBehaviorTests
     {
         RunSta(() =>
         {
-            var vm = new MainViewModel();
+        var vm = ProductionViewModelFixture.Create();
             vm.Songs[2].IsSourceChecked = true;
             vm.Songs[3].IsSourceChecked = true;
             vm.Songs[4].IsDestinationChecked = true;
@@ -91,13 +91,13 @@ public sealed class SongDragDropBehaviorTests
     {
         RunSta(() =>
         {
-            using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
             var source = fromA ? vm.PaneA : vm.PaneB;
             var target = fromA ? vm.PaneB : vm.PaneA;
-            source.SelectedCollection = new("Source", NavigationFilter.Playlist, "Source");
-            target.SelectedCollection = new("Target", NavigationFilter.Playlist, "Target");
+            source.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Test Playlist A");
+            target.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Empty Playlist");
             var songs = vm.Songs.Take(3).ToArray();
-            foreach (var song in songs) song.AddPlaylist("Source");
+            foreach (var song in songs) song.AddPlaylist("Test Playlist A");
             source.Refresh(); target.Refresh();
             // Checked songs in the opposite pane must not influence the payload.
             target.ToggleCheckedCommand.Execute(songs[2]);
@@ -111,7 +111,7 @@ public sealed class SongDragDropBehaviorTests
             var payload = SongDragDropBehavior.CreateDragPayloadForMouseDown(sourceGrid, new DataGridRow { Item = songs[0] });
             Assert.NotNull(payload);
             Assert.Equal(multi ? 2 : 1, payload.Count);
-            Assert.Equal("Source", payload.SourcePlaylist);
+            Assert.Equal("Test Playlist A", payload.SourcePlaylist);
             Assert.True(targetGrid.AllowDrop);
             Assert.True(target.DropCommand.CanExecute(payload));
             var data = new DataObject(typeof(SongDragPayload), payload);
@@ -132,17 +132,17 @@ public sealed class SongDragDropBehaviorTests
             targetGrid.RaiseEvent(drop);
             Assert.True(drop.Handled);
             Assert.Equal(DragDropEffects.Copy, drop.Effects);
-            Assert.Contains("Target", songs[0].PlaylistNames);
-            Assert.Equal(multi, songs[1].PlaylistNames.Contains("Target"));
-            Assert.DoesNotContain("Target", songs[2].PlaylistNames);
-            Assert.All(songs, s => Assert.Contains("Source", s.PlaylistNames));
+            Assert.Contains("Empty Playlist", songs[0].PlaylistNames);
+            Assert.Equal(multi, songs[1].PlaylistNames.Contains("Empty Playlist"));
+            Assert.DoesNotContain("Empty Playlist", songs[2].PlaylistNames);
+            Assert.All(songs, s => Assert.Contains("Test Playlist A", s.PlaylistNames));
             Assert.Equal(multi ? 2 : 1, target.VisibleCount);
             Assert.Equal(3, source.VisibleCount);
             Assert.True(target.IsSongChecked(songs[2]));
             Assert.False(target.IsSongChecked(songs[0]));
             Assert.Same(songs[2], target.SelectedSong);
             target.DropCommand.Execute(payload);
-            Assert.Single(songs[0].PlaylistNames, n => n == "Target");
+            Assert.Single(songs[0].PlaylistNames, n => n == "Empty Playlist");
         });
     }
 
@@ -153,27 +153,27 @@ public sealed class SongDragDropBehaviorTests
     {
         RunSta(() =>
         {
-            using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
             var source = fromA ? vm.PaneA : vm.PaneB;
             var target = fromA ? vm.PaneB : vm.PaneA;
-            source.SelectedCollection = new("One", NavigationFilter.Playlist, "same");
-            target.SelectedCollection = new("Alias", NavigationFilter.Playlist, "SAME");
-            var song = vm.Songs[0]; song.AddPlaylist("same");
+            source.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Test Playlist A");
+            target.SelectedCollection = source.SelectedCollection;
+            var song = vm.Songs.First(item => item.PlaylistNames.Contains("Test Playlist A"));
             var payload = source.CreateDragPayload(song);
             Assert.False(target.DropCommand.CanExecute(payload));
             target.SelectedCollection = new("All", NavigationFilter.AllSongs);
             Assert.False(target.DropCommand.CanExecute(payload));
-            target.SelectedCollection = new("Two", NavigationFilter.Playlist, "two");
+            target.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Test Playlist B");
             source.SelectedCollection = new("All", NavigationFilter.AllSongs);
-            Assert.False(target.DropCommand.CanExecute(source.CreateDragPayload(song)));
-            source.SelectedCollection = new("One", NavigationFilter.Playlist, "same");
+            Assert.True(target.DropCommand.CanExecute(source.CreateDragPayload(song)));
+            source.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Test Playlist A");
             Assert.False(target.DropCommand.CanExecute(payload with { Origin = target.Side.ToString() }));
             Assert.False(target.DropCommand.CanExecute(payload with { Origin = "Source" }));
-            source.SelectedCollection = new("Changed", NavigationFilter.Playlist, "changed");
+            source.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Other Playlist");
             Assert.False(target.DropCommand.CanExecute(payload));
             target.DropCommand.Execute(payload);
-            Assert.DoesNotContain("two", song.PlaylistNames);
-            source.SelectedCollection = new("One", NavigationFilter.Playlist, "same");
+            Assert.DoesNotContain("Test Playlist B", song.PlaylistNames);
+            source.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Test Playlist A");
             vm.GameState = GameAccessState.RunningReadOnly;
             Assert.False(target.DropCommand.CanExecute(payload));
         });

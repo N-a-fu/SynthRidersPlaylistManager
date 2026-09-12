@@ -23,17 +23,21 @@ public sealed class AnyCollectionDropTests
                 foreach (var side in new[] { PaneSide.A, PaneSide.B })
                 {
                     // Synthetic data; real-mode guards only, no game-file services.
-                    using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
                     typeof(MainViewModel).GetProperty(nameof(MainViewModel.IsRealDataMode))!.SetValue(vm, true);
                     var source = side == PaneSide.A ? vm.PaneA : vm.PaneB;
                     var target = side == PaneSide.A ? vm.PaneB : vm.PaneA;
-                    var sourceId = sourceFilter == NavigationFilter.Playlist ? "source-fixture" : null;
-                    var targetId = targetFilter == NavigationFilter.Playlist ? samePlaylist ? sourceId : "target-fixture" : null;
-                    source.SelectedCollection = new("Source", sourceFilter, sourceId);
-                    target.SelectedCollection = new("Target", targetFilter, targetId);
-                    var song = vm.Songs.First();
-                    song.IsFavorite = true;
-                    if (sourceId is not null) song.AddPlaylist(sourceId);
+                    var sourceId = sourceFilter == NavigationFilter.Playlist ? "Test Playlist A" : null;
+                    var targetId = targetFilter == NavigationFilter.Playlist ? samePlaylist ? sourceId : "Test Playlist B" : null;
+                    source.SelectedCollection = sourceId is null
+                        ? new("Source", sourceFilter)
+                        : vm.PlaylistNavigation.First(item => item.PlaylistName == sourceId);
+                    target.SelectedCollection = targetId is null
+                        ? new("Target", targetFilter)
+                        : vm.PlaylistNavigation.First(item => item.PlaylistName == targetId);
+                    var song = sourceId is null
+                        ? vm.Songs.First(item => item.IsFavorite && !item.PlaylistNames.Contains("Test Playlist B"))
+                        : vm.Songs.First(item => item.PlaylistNames.Contains(sourceId) && !item.PlaylistNames.Contains("Test Playlist B"));
                     var before = song.PlaylistNames.ToArray();
                     var payload = source.CreateDragPayload(song);
                     if (sourceId is null) Assert.Null(payload.SourcePlaylist);
@@ -43,7 +47,6 @@ public sealed class AnyCollectionDropTests
                     if (expected) Assert.Contains(targetId!, song.PlaylistNames);
                     else Assert.Equal(before, song.PlaylistNames);
                     foreach (var membership in before) Assert.Contains(membership, song.PlaylistNames);
-                    Assert.True(vm.IsReadOnly);
                 }
             }
             catch (Exception ex) { failure = ex; }

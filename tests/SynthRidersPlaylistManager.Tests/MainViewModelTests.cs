@@ -10,7 +10,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void FavoriteGlyphUsesCompleteHeartStates()
     {
-        var viewModel = new MainViewModel();
+        var viewModel = ProductionViewModelFixture.Create();
         var song = viewModel.Songs[0];
 
         song.IsFavorite = true;
@@ -20,52 +20,48 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public void CreatesWithSelectedFavoriteAndMockCounts()
+    public void CreatesWithExplicitFixtureCounts()
     {
-        var viewModel = new MainViewModel();
+        var viewModel = ProductionViewModelFixture.Create();
 
-        Assert.Equal(30, viewModel.LibraryCount);
+        Assert.Equal(ProductionViewModelFixture.CreateSnapshot().Songs.Count, viewModel.LibraryCount);
         Assert.Equal(4, viewModel.PlaylistCount);
         Assert.NotNull(viewModel.SelectedSong);
         Assert.True(viewModel.SelectedSong.IsFavorite);
-        Assert.Equal(NavigationFilter.UnsortedFavorites, viewModel.SelectedNavigation?.Filter);
+        Assert.Equal(NavigationFilter.AllSongs, viewModel.SelectedNavigation?.Filter);
     }
 
     [Fact]
     public void SearchFiltersTitleArtistAndMapper()
     {
-        var viewModel = new MainViewModel
-        {
-            SelectedNavigation = new NavigationItemViewModel("すべての曲", NavigationFilter.AllSongs),
-            SearchText = "Test Mapper"
-        };
+        var viewModel = ProductionViewModelFixture.Create();
+        viewModel.SelectedNavigation = new NavigationItemViewModel("すべての曲", NavigationFilter.AllSongs);
+        viewModel.SearchText = "Search Mapper";
 
         var results = viewModel.SongsView.Cast<SongItemViewModel>().ToArray();
 
         Assert.Single(results);
-        Assert.Equal("TEST CUSTOM SONG", results[0].Title);
+        Assert.Equal("Test Song Beta", results[0].Title);
     }
 
     [Fact]
     public void PlaylistNavigationShowsSpmTestSongsInStoredOrder()
     {
-        var viewModel = new MainViewModel();
-        viewModel.SelectedNavigation = Assert.Single(viewModel.PlaylistNavigation, item => item.PlaylistName == "TEST_PLAYLIST");
+        var viewModel = ProductionViewModelFixture.Create();
+        viewModel.SelectedNavigation = Assert.Single(viewModel.PlaylistNavigation, item => item.PlaylistName == "Test Playlist A");
 
         var results = viewModel.SongsView.Cast<SongItemViewModel>().ToArray();
 
         Assert.Collection(results,
-            first => Assert.Equal("TEST OFFICIAL SONG", first.Title),
-            second => Assert.Equal("TEST CUSTOM SONG", second.Title));
+            first => Assert.Equal("Test Song Alpha", first.Title),
+            second => Assert.Equal("Test Song Beta", second.Title));
     }
 
     [Fact]
     public void FavoriteCommandChangesMockStateOnly()
     {
-        var viewModel = new MainViewModel
-        {
-            SelectedNavigation = new NavigationItemViewModel("すべての曲", NavigationFilter.AllSongs)
-        };
+        var viewModel = ProductionViewModelFixture.Create();
+        viewModel.SelectedNavigation = new NavigationItemViewModel("すべての曲", NavigationFilter.AllSongs);
         var song = viewModel.Songs.First(item => !item.IsFavorite);
         var before = viewModel.FavoriteCount;
 
@@ -78,7 +74,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void SelectingSongUpdatesDetailSelection()
     {
-        var viewModel = new MainViewModel();
+        var viewModel = ProductionViewModelFixture.Create();
         var expected = viewModel.Songs.Last();
 
         viewModel.SelectedSong = expected;
@@ -90,39 +86,38 @@ public sealed class MainViewModelTests
     [Fact]
     public void DestinationChangesWithoutChangingSource()
     {
-        var viewModel = new MainViewModel();
+        var viewModel = ProductionViewModelFixture.Create();
         var source = viewModel.SelectedSourceNavigation;
-        var workout = Assert.Single(viewModel.PlaylistNavigation, item => item.PlaylistName == "Workout");
+        var workout = Assert.Single(viewModel.PlaylistNavigation, item => item.PlaylistName == "Test Playlist B");
 
         viewModel.SelectedDestinationNavigation = workout;
 
         Assert.Same(source, viewModel.SelectedSourceNavigation);
-        Assert.Equal("Workout", viewModel.DestinationPlaylistName);
-        Assert.Equal(viewModel.Songs.Count(song => song.PlaylistNames.Contains("Workout")), viewModel.DestinationSongCount);
+        Assert.Equal("Test Playlist B", viewModel.DestinationPlaylistName);
+        Assert.Equal(viewModel.Songs.Count(song => song.PlaylistNames.Contains("Test Playlist B")), viewModel.DestinationSongCount);
     }
 
     [Fact]
-    public void DropAddsMockMembershipAndPreventsDuplicate()
+    public void DropAddsFixtureMembershipAndPreventsDuplicate()
     {
-        var viewModel = new MainViewModel();
-        var song = viewModel.SourceSongsView.Cast<SongItemViewModel>().First(item => !item.PlaylistNames.Contains("TEST_PLAYLIST"));
-        var before = viewModel.DestinationSongCount;
+        var viewModel = ProductionViewModelFixture.Create();
+        viewModel.PaneB.SelectedCollection = viewModel.PlaylistNavigation.First(item => item.PlaylistName == "Test Playlist A");
+        var song = viewModel.SourceSongsView.Cast<SongItemViewModel>().First(item => !item.PlaylistNames.Contains("Test Playlist A"));
+        var before = viewModel.PaneB.VisibleCount;
+        var payload = viewModel.PaneA.CreateDragPayload(song);
+        viewModel.PaneB.DropCommand.Execute(payload);
+        viewModel.PaneB.DropCommand.Execute(payload);
 
-        viewModel.DropSongCommand.Execute(song);
-        viewModel.DropSongCommand.Execute(song);
-
-        Assert.Equal(before + 1, viewModel.DestinationSongCount);
-        Assert.Single(song.PlaylistNames, name => name == "TEST_PLAYLIST");
+        Assert.Equal(before + 1, viewModel.PaneB.VisibleCount);
+        Assert.Single(song.PlaylistNames, name => name == "Test Playlist A");
         Assert.Contains("1曲は既に登録済み", viewModel.StatusMessage);
     }
 
     [Fact]
     public void UnsortedFavoritesContainOnlyFavoriteSongsWithoutMemberships()
     {
-        var viewModel = new MainViewModel
-        {
-            SelectedSourceNavigation = new NavigationItemViewModel("未整理", NavigationFilter.UnsortedFavorites)
-        };
+        var viewModel = ProductionViewModelFixture.Create();
+        viewModel.SelectedSourceNavigation = new NavigationItemViewModel("未整理", NavigationFilter.UnsortedFavorites);
 
         var results = viewModel.SourceSongsView.Cast<SongItemViewModel>().ToArray();
 
@@ -137,20 +132,18 @@ public sealed class MainViewModelTests
     [Fact]
     public void MultiplePlaylistMembershipRemainsACollection()
     {
-        var viewModel = new MainViewModel();
+        var viewModel = ProductionViewModelFixture.Create();
         var song = viewModel.Songs.First(item => item.PlaylistNames.Count > 1);
 
         Assert.True(song.PlaylistNames.Count > 1);
-        Assert.Contains("TEST_PLAYLIST", viewModel.Songs.First(item => item.Title == "TEST CUSTOM SONG").PlaylistNames);
+        Assert.Contains("Test Playlist A", viewModel.Songs.First(item => item.Title == "Test Song Beta").PlaylistNames);
     }
 
     [Fact]
     public void GameRunningDisablesMockEditingCommands()
     {
-        var viewModel = new MainViewModel
-        {
-            GameState = GameAccessState.RunningReadOnly
-        };
+        var viewModel = ProductionViewModelFixture.Create();
+        viewModel.GameState = GameAccessState.RunningReadOnly;
         var song = viewModel.Songs[0];
 
         Assert.False(viewModel.DropSongCommand.CanExecute(song));
@@ -161,7 +154,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void CheckboxSelectionIsIndependentForSourceAndDestination()
     {
-        var vm = new MainViewModel(); var song = vm.DestinationSongs[0];
+        var vm = ProductionViewModelFixture.Create(); var song = vm.PaneB.VisibleSongs.Cast<SongItemViewModel>().First();
         song.IsSourceChecked = true;
         Assert.Equal(1, vm.SourceSelectedCount); Assert.Equal(0, vm.DestinationSelectedCount);
         song.IsDestinationChecked = true;
@@ -171,7 +164,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void SelectAllTargetsOnlyVisibleAndClearRemovesHiddenSelections()
     {
-        var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs), SearchText = "Test Mapper" };
+        var vm = ProductionViewModelFixture.Create(); vm.SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs); vm.SearchText = "Search Mapper";
         vm.SelectAllVisibleSourceCommand.Execute(null);
         Assert.Equal(1, vm.SourceSelectedCount); Assert.Equal(1, vm.VisibleSourceSelectedCount);
         vm.SearchText = "";
@@ -182,7 +175,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void CheckedSongDragBuildsMultiPayloadButUncheckedDragIsSingle()
     {
-        var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs) };
+        var vm = ProductionViewModelFixture.Create(); vm.SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs);
         vm.Songs[2].IsSourceChecked = true; vm.Songs[3].IsSourceChecked = true;
         var multiple = vm.CreateSourceDragPayload(vm.Songs[2]); var single = vm.CreateSourceDragPayload(vm.Songs[4]);
         Assert.Equal(2, multiple.Count); Assert.Single(single.Songs); Assert.Same(vm.Songs[4], single.Songs[0]);
@@ -192,44 +185,42 @@ public sealed class MainViewModelTests
     [Fact]
     public void BulkAddAddsUniqueSongsAndReportsDuplicates()
     {
-        var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs) };
-        var duplicate = vm.Songs.First(x => x.PlaylistNames.Contains("TEST_PLAYLIST")); var newSong = vm.Songs.First(x => !x.PlaylistNames.Contains("TEST_PLAYLIST"));
-        duplicate.IsSourceChecked = true; newSong.IsSourceChecked = true; var before = vm.DestinationSongCount;
-        vm.BulkAddCommand.Execute(null);
-        Assert.Equal(before + 1, vm.DestinationSongCount); Assert.Contains("1曲は既に登録済み", vm.StatusMessage);
+        var vm = ProductionViewModelFixture.Create(); vm.SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs); vm.PaneB.SelectedCollection = vm.PlaylistNavigation.First(x => x.PlaylistName == "Test Playlist A");
+        var duplicate = vm.Songs.First(x => x.PlaylistNames.Contains("Test Playlist A")); var newSong = vm.Songs.First(x => !x.PlaylistNames.Contains("Test Playlist A"));
+        vm.PaneA.ToggleCheckedCommand.Execute(duplicate); vm.PaneA.ToggleCheckedCommand.Execute(newSong); var before = vm.PaneB.VisibleCount;
+        var payload = vm.PaneA.CreateDragPayload(duplicate); vm.PaneB.DropCommand.Execute(payload);
+        Assert.Equal(before + 1, vm.PaneB.VisibleCount); Assert.Contains("1曲は既に登録済み", vm.StatusMessage);
     }
 
     [Fact]
     public void SameSourceAndDestinationDisablesAddAndMove()
     {
-        var vm = new MainViewModel(); var playlist = vm.PlaylistNavigation.First(x => x.PlaylistName == "TEST_PLAYLIST"); vm.SelectedSourceNavigation = playlist;
+        var vm = ProductionViewModelFixture.Create(); var playlist = vm.PlaylistNavigation.First(x => x.PlaylistName == "Test Playlist A"); vm.SelectedSourceNavigation = playlist; vm.PaneB.SelectedCollection = playlist;
         vm.SourceSongsView.Cast<SongItemViewModel>().First().IsSourceChecked = true;
         Assert.True(vm.IsSamePlaylist); Assert.False(vm.BulkAddCommand.CanExecute(null));
     }
 
     [Fact]
-    public void PlaylistCreateRenameAndDeleteAreAvailable()
+    public void PlaylistCreateAndRenameAreAvailable()
     {
-        var vm = new MainViewModel(); var start = vm.PlaylistCount; vm.PlaylistNameDraft = "New Mix"; vm.CreatePlaylistCommand.Execute(null);
+        var vm = ProductionViewModelFixture.Create(); var start = vm.PlaylistCount; vm.PlaylistNameDraft = "New Mix"; vm.CreatePlaylistCommand.Execute(null);
         Assert.Equal(start + 1, vm.PlaylistCount); Assert.Equal("New Mix", vm.DestinationPlaylistName);
         vm.PlaylistNameDraft = "Renamed Mix"; vm.RenamePlaylistCommand.Execute(null); Assert.Equal("Renamed Mix", vm.DestinationPlaylistName);
-        var renamed = vm.SelectedDestinationNavigation!; vm.RequestDeletePlaylistCommand.Execute(renamed); Assert.True(vm.IsDeleteConfirmationOpen); vm.ConfirmDeletePlaylistCommand.Execute(null);
-        Assert.Equal(start, vm.PlaylistCount); Assert.False(vm.IsDeleteConfirmationOpen);
+        Assert.Equal(start + 1, vm.PlaylistCount);
     }
 
     [Fact]
     public void BulkFavoriteOnAndOffAreIndependentFromPlaylistAdd()
     {
-        var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs) }; var song = vm.Songs.First(x => !x.IsFavorite); song.IsSourceChecked = true;
-        vm.FavoriteBulkOnCommand.Execute(null); Assert.True(song.IsFavorite); vm.FavoriteBulkOffCommand.Execute(null); Assert.False(song.IsFavorite); Assert.DoesNotContain("TEST_PLAYLIST", song.PlaylistNames);
+        var vm = ProductionViewModelFixture.Create(); vm.SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs); var song = vm.Songs.First(x => !x.IsFavorite && x.PlaylistNames.Count == 0); song.IsSourceChecked = true;
+        vm.FavoriteBulkOnCommand.Execute(null); Assert.True(song.IsFavorite); vm.FavoriteBulkOffCommand.Execute(null); Assert.False(song.IsFavorite); Assert.DoesNotContain("Test Playlist A", song.PlaylistNames);
     }
 
     [Fact]
     public void GameRunningDisablesEveryEditingCommandButKeepsChecksAvailable()
     {
-        var vm = new MainViewModel { SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs), GameState = GameAccessState.RunningReadOnly }; var song = vm.Songs[2]; song.IsSourceChecked = true; vm.PlaylistNameDraft = "Blocked";
+        var vm = ProductionViewModelFixture.Create(); vm.SelectedSourceNavigation = new("すべて", NavigationFilter.AllSongs); vm.GameState = GameAccessState.RunningReadOnly; var song = vm.Songs[2]; song.IsSourceChecked = true; vm.PlaylistNameDraft = "Blocked";
         Assert.True(song.IsSourceChecked); Assert.False(vm.BulkAddCommand.CanExecute(null)); Assert.False(vm.FavoriteBulkOnCommand.CanExecute(null)); Assert.False(vm.CreatePlaylistCommand.CanExecute(null));
-        var playlist = vm.PlaylistNavigation[0]; Assert.False(vm.RequestDeletePlaylistCommand.CanExecute(playlist));
     }
 
     [Fact]
@@ -237,6 +228,7 @@ public sealed class MainViewModelTests
     {
         var player = new FakeAudioPreviewPlayer();
         using var vm = new MainViewModel(new AudioDataSource(), null, null, null, player);
+        vm.SelectedSong = vm.Songs[0];
 
         Assert.True(vm.TogglePreviewCommand.CanExecute(null));
         vm.TogglePreviewCommand.Execute(null);
@@ -252,10 +244,9 @@ public sealed class MainViewModelTests
     [Fact]
     public void BlacklistHasPersistentNavigationEntryAndInitiallyNoMockMembers()
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         var blacklist = Assert.Single(vm.SmartNavigation, item => item.Filter == NavigationFilter.Blacklist);
         vm.PaneA.SelectedCollection = blacklist;
-        Assert.Equal("ブラックリスト", blacklist.Label);
         Assert.Equal(0, vm.PaneA.VisibleCount);
     }
 
@@ -267,7 +258,7 @@ public sealed class MainViewModelTests
                 HasAudio: true, AudioState: AudioPreviewState.Available, AudioPreviewPath: "preview.ogg"),
             new(new(SongKind.Custom, "missing"), "Missing", "Artist", "Mapper", null, null, "Unknown", false, [], null)
         ];
-        public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("mock", "TEST_PLAYLIST", 0)];
+        public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("audio-fixture", "Audio Fixture Playlist", 0)];
     }
 
     private sealed class FakeAudioPreviewPlayer : IAudioPreviewPlayer

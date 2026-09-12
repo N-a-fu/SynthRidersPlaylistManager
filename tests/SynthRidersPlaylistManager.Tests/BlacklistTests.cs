@@ -101,7 +101,7 @@ public sealed class BlacklistTests : IDisposable
     [InlineData(false)]
     public void BothPaneBlacklistCommandsShareStateButNotChecksOrSelection(bool fromA)
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         var source = fromA ? vm.PaneA : vm.PaneB;
         var other = fromA ? vm.PaneB : vm.PaneA;
         source.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.AllSongs);
@@ -136,7 +136,7 @@ public sealed class BlacklistTests : IDisposable
     [InlineData(false)]
     public void FavoritesRefreshBothPanesWithoutChangingChecks(bool fromA)
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         vm.PaneA.SelectedCollection = vm.FavoritesNavigation[0];
         vm.PaneB.SelectedCollection = vm.FavoritesNavigation[0];
         var pane = fromA ? vm.PaneA : vm.PaneB;
@@ -155,7 +155,7 @@ public sealed class BlacklistTests : IDisposable
     [Fact]
     public void GameRunningBlocksBlacklistCommandsButNotChecks()
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         var song = vm.Songs.First(x => x.Identity.Kind == SongKind.Custom);
         vm.PaneA.ToggleCheckedCommand.Execute(song);
         vm.GameState = GameAccessState.RunningReadOnly;

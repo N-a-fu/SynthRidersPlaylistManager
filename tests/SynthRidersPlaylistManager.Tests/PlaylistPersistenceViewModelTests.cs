@@ -52,7 +52,7 @@ public sealed class PlaylistPersistenceViewModelTests
     }
 
     [Fact]
-    public async Task RealModeRoutesCreateRenameDropRemoveAndDeleteToPlaylistStore()
+    public async Task RealModeRoutesCreateRenameDropAndRemoveToPlaylistStore()
     {
         var hashA = new string('a', 64); var hashB = new string('b', 64);
         Song[] songs =
@@ -85,10 +85,6 @@ public sealed class PlaylistPersistenceViewModelTests
         Assert.Contains(vm.PlaylistNavigation, x => x.PlaylistName == "New List");
         vm.PlaylistNameDraft = "Renamed List"; vm.RenamePlaylistCommand.Execute(null);
         Assert.Contains(vm.PlaylistNavigation, x => x.PlaylistName == "Renamed List");
-        var renamed = vm.SelectedDestinationNavigation!;
-        vm.RequestDeletePlaylistCommand.Execute(renamed); vm.ConfirmDeletePlaylistCommand.Execute(null);
-        Assert.Equal("000006__renamedlist.playlist", store.Deleted);
-
         vm.GameState = GameAccessState.RunningReadOnly;
         Assert.False(vm.CreatePlaylistCommand.CanExecute(null));
         Assert.False(vm.PaneB.RemoveFromCurrentPlaylistCommand.CanExecute(null));

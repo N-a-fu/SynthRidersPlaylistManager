@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,19 +9,17 @@ using SynthRidersPlaylistManager.App.Views;
 
 namespace SynthRidersPlaylistManager.Tests;
 
-public sealed class DragStartEntryTests
+[Collection(WpfTestCollection.Name)]
+public sealed class DragStartEntryTests(WpfTestFixture wpf)
 {
     [Fact]
     public void RealModeBothViewsRegisterMouseDownAndBuildOnlyTheCorrectDragCandidate()
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
+        wpf.Run(() =>
         {
-            try
-            {
                 foreach (var side in new[] { PaneSide.A, PaneSide.B })
                 {
-                    using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
                     // No real files: enable the same state that disabled the actual entry.
                     typeof(MainViewModel).GetProperty(nameof(MainViewModel.IsRealDataMode))!.SetValue(vm, true);
                     var pane = side == PaneSide.A ? vm.PaneA : vm.PaneB;
@@ -30,7 +27,8 @@ public sealed class DragStartEntryTests
                     var songs = vm.Songs.Take(3).ToArray();
                     foreach (var song in songs) song.AddPlaylist("entry-fixture");
                     pane.SelectedCollection = new("fixture", NavigationFilter.Playlist, "entry-fixture");
-                    var resources = new ResourceDictionary { Source = new Uri("/SynthRidersPlaylistManager.App;component/Resources/Theme.xaml", UriKind.Relative) };
+                    var assemblyName = typeof(CollectionBrowserView).Assembly.GetName().Name;
+                    var resources = new ResourceDictionary { Source = new Uri($"/{assemblyName};component/Resources/Theme.xaml", UriKind.Relative) };
                     var view = new CollectionBrowserView(resources) { DataContext = pane };
                     view.Measure(new Size(900, 700)); view.Arrange(new Rect(0, 0, 900, 700)); view.UpdateLayout();
                     var grid = (DataGrid)view.FindName("SongsGrid");
@@ -54,11 +52,7 @@ public sealed class DragStartEntryTests
                     Assert.Null(Pending(grid));
                     Assert.True(other.IsSongChecked(songs[2]));
                 }
-            }
-            catch (Exception ex) { failure = ex; }
         });
-        thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
-        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     [Fact]

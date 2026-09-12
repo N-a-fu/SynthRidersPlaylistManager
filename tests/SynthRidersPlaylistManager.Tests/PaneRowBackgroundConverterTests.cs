@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,7 +8,8 @@ using SynthRidersPlaylistManager.App.Views;
 
 namespace SynthRidersPlaylistManager.Tests;
 
-public sealed class PaneRowBackgroundConverterTests
+[Collection(WpfTestCollection.Name)]
+public sealed class PaneRowBackgroundConverterTests(WpfTestFixture wpf)
 {
     [Theory]
     [InlineData(true, false, false, PaneSide.A)]
@@ -19,7 +19,7 @@ public sealed class PaneRowBackgroundConverterTests
     public void SelectedOrPaneCheckedRowsUseTheSameBlueHighlight(
         bool selected, bool sourceChecked, bool destinationChecked, PaneSide side)
     {
-        RunSta(() =>
+        wpf.Run(() =>
         {
             var converter = new PaneRowBackgroundConverter();
             var brush = Assert.IsType<SolidColorBrush>(converter.Convert(
@@ -33,7 +33,7 @@ public sealed class PaneRowBackgroundConverterTests
     [Fact]
     public void OtherPaneCheckDoesNotHighlightTheRow()
     {
-        RunSta(() =>
+        wpf.Run(() =>
         {
             var converter = new PaneRowBackgroundConverter();
             var paneABrush = Assert.IsType<SolidColorBrush>(converter.Convert(
@@ -49,7 +49,7 @@ public sealed class PaneRowBackgroundConverterTests
     [Fact]
     public void HoverIsDarkGrayAndDoesNotOverrideSelection()
     {
-        RunSta(() =>
+        wpf.Run(() =>
         {
             var converter = new PaneRowBackgroundConverter();
             var hover = Assert.IsType<SolidColorBrush>(converter.Convert(
@@ -65,7 +65,7 @@ public sealed class PaneRowBackgroundConverterTests
     [Fact]
     public void InactivePaneKeepsSelectionStateWithoutStrongHighlight()
     {
-        RunSta(() =>
+        wpf.Run(() =>
         {
             var converter = new PaneRowBackgroundConverter();
             var brush = Assert.IsType<SolidColorBrush>(converter.Convert(
@@ -79,17 +79,18 @@ public sealed class PaneRowBackgroundConverterTests
     [Fact]
     public void BrowserUsesExtendedFullRowSelectionAndTransparentCells()
     {
-        RunSta(() =>
+        wpf.Run(() =>
         {
             var application = Application.Current ?? new Application();
             if (!application.Resources.MergedDictionaries.Any(x => x.Source?.OriginalString.Contains("Theme.xaml", StringComparison.Ordinal) == true))
             {
                 application.Resources.MergedDictionaries.Add(new ResourceDictionary
                 {
-                    Source = new Uri("pack://application:,,,/SynthRidersPlaylistManager.App;component/Resources/Theme.xaml")
+                    Source = new Uri($"pack://application:,,,/{typeof(CollectionBrowserView).Assembly.GetName().Name};component/Resources/Theme.xaml")
                 });
             }
-            var view = new CollectionBrowserView { DataContext = new MainViewModel().PaneA };
+            using var viewModel = ProductionViewModelFixture.Create();
+            var view = new CollectionBrowserView { DataContext = viewModel.PaneA };
             var grid = Assert.IsType<DataGrid>(view.FindName("SongsGrid"));
 
             Assert.Equal(DataGridSelectionMode.Extended, grid.SelectionMode);
@@ -99,15 +100,5 @@ public sealed class PaneRowBackgroundConverterTests
             Assert.Equal(Brushes.Transparent, cell.Background);
             Assert.Null(cell.FocusVisualStyle);
         });
-    }
-
-    private static void RunSta(Action action)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() => { try { action(); } catch (Exception exception) { failure = exception; } });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 }

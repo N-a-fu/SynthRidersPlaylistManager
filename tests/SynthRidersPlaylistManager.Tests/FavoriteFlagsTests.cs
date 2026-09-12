@@ -114,7 +114,7 @@ public sealed class FavoriteFlagsTests : IDisposable
     [Fact]
     public void EveryNormalCollectionOnlyAddsEvenWithMixedOrAlreadyRegisteredChecks()
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         var songs = vm.Songs.Where(s => s.Identity.Kind == SongKind.Custom).Take(2).ToArray();
         foreach (var s in songs) vm.PaneA.ToggleCheckedCommand.Execute(s);
         foreach (var collection in vm.AllCollections.Where(c => c.Filter != NavigationFilter.Blacklist))
@@ -135,10 +135,12 @@ public sealed class FavoriteFlagsTests : IDisposable
     [Fact]
     public void LeftBlacklistRemovalOnlyRemovesCheckedRegisteredSongs()
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
         var songs = vm.Songs.Where(s => s.Identity.Kind == SongKind.Custom).Take(3).ToArray();
-        songs[0].IsBlacklisted = true;
-        songs[1].IsBlacklisted = true;
+        vm.PaneA.ToggleCheckedCommand.Execute(songs[0]);
+        vm.PaneA.ToggleCheckedCommand.Execute(songs[1]);
+        vm.PaneA.AddBlacklistCommand.Execute(null);
+        vm.PaneA.ClearSelectionCommand.Execute(null);
         vm.PaneA.ToggleCheckedCommand.Execute(songs[0]);
         vm.PaneA.ToggleCheckedCommand.Execute(songs[2]);
         vm.PaneA.SelectedCollection = vm.SmartNavigation.Single(n => n.Filter == NavigationFilter.Blacklist);

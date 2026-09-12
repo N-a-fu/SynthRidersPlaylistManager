@@ -5,16 +5,16 @@ namespace SynthRidersPlaylistManager.Tests;
 public sealed class MockLibraryDataSourceTests
 {
     [Fact]
-    public void ProvidesThirtySongsAndExpectedPlaylists()
+    public void ProvidesExplicitArtificialSongsAndPlaylists()
     {
         var source = new MockLibraryDataSource();
 
         var songs = source.GetSongs();
         var playlists = source.GetPlaylists();
 
-        Assert.Equal(30, songs.Count);
-        Assert.Contains(songs, song => song.Title == "TEST OFFICIAL SONG");
-        Assert.Contains(songs, song => song.Title == "TEST CUSTOM SONG" && song.Mapper == "Test Mapper");
-        Assert.Contains(playlists, playlist => playlist.Name == "TEST_PLAYLIST" && playlist.SongCount == 2);
+        Assert.Equal(2, songs.Count);
+        Assert.All(songs, song => Assert.StartsWith("Test Song", song.Title));
+        Assert.Equal(2, playlists.Count);
+        Assert.All(playlists, playlist => Assert.StartsWith("Test Playlist", playlist.Name));
     }
 }

@@ -8,7 +8,7 @@ public sealed class PlaylistCreateButtonStateTests
     [Fact]
     public void CreateAvailabilityDependsOnNameAndGameStateNotPaneSelection()
     {
-        using var vm = new MainViewModel();
+        using var vm = ProductionViewModelFixture.Create();
 
         vm.PlaylistNameDraft = "Button State Test";
         Assert.True(vm.CreatePlaylistCommand.CanExecute(null));

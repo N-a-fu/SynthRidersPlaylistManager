@@ -8,7 +8,7 @@ public sealed class CheckboxPerformanceTests
     [Fact]
     public void CheckboxChangesUpdateOnlyPaneSelectionStateWithoutRefreshingTheView()
     {
-        var vm = new MainViewModel();
+        var vm = ProductionViewModelFixture.Create();
         var pane = vm.PaneA;
         var resets = 0;
         ((INotifyCollectionChanged)pane.VisibleSongs).CollectionChanged += (_, e) =>
@@ -32,7 +32,7 @@ public sealed class CheckboxPerformanceTests
     [Fact]
     public void PaneChecksRemainIndependentAndCreateCheckedDragPayloads()
     {
-        var vm = new MainViewModel();
+        var vm = ProductionViewModelFixture.Create();
         vm.PaneA.ToggleCheckedCommand.Execute(vm.Songs[0]);
         vm.PaneA.ToggleCheckedCommand.Execute(vm.Songs[1]);
         vm.PaneB.ToggleCheckedCommand.Execute(vm.Songs[2]);
