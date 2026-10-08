@@ -36,16 +36,29 @@ public sealed class NavigationItemViewModel : Mvvm.ObservableObject
     public int? Count
     {
         get => _count;
-        set { if (SetProperty(ref _count, value)) OnPropertyChanged(nameof(DisplayLabel)); }
+        set
+        {
+            if (SetProperty(ref _count, value))
+            {
+                OnPropertyChanged(nameof(CountDisplay));
+                OnPropertyChanged(nameof(DisplayLabel));
+            }
+        }
     }
     public int BlacklistCount
     {
         get => _blacklistCount;
-        set { if (SetProperty(ref _blacklistCount, value)) OnPropertyChanged(nameof(DisplayLabel)); }
+        set
+        {
+            if (SetProperty(ref _blacklistCount, value))
+            {
+                OnPropertyChanged(nameof(CountDisplay));
+                OnPropertyChanged(nameof(DisplayLabel));
+            }
+        }
     }
-    public string DisplayLabel => Count is null
-        ? Label
-        : BlacklistCount == 0 ? $"{Label}  {Count}" : $"{Label}  {Count} + BL {BlacklistCount}";
+    public string CountDisplay => Count is null ? "" : BlacklistCount == 0 ? $"{Count}" : $"{Count} + BL {BlacklistCount}";
+    public string DisplayLabel => Count is null ? Label : $"{Label}  {CountDisplay}";
     public ICommand? OpenAsSourceCommand { get; set; }
     public ICommand? SetAsDestinationCommand { get; set; }
     public ICommand? PrepareRenameCommand { get; set; }

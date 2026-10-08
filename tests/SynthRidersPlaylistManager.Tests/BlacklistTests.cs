@@ -211,5 +211,42 @@ public sealed class BlacklistTests : IDisposable
         Assert.Contains("Test Playlist B", song.PlaylistNames);
     }
 
+    [Theory]
+    [InlineData(PaneSide.A)]
+    [InlineData(PaneSide.B)]
+    public void PlaylistBlacklistedSongCanBeCheckedRemovedFromPlaylistOrUnblacklisted(PaneSide side)
+    {
+        using var vm = ProductionViewModelFixture.Create();
+        var pane = side == PaneSide.A ? vm.PaneA : vm.PaneB;
+        var playlist = vm.PlaylistNavigation.Single(item => item.PlaylistName == "Test Playlist A");
+        var song = vm.Songs.First(item => item.PlaylistNames.Contains("Test Playlist A"));
+
+        vm.PaneA.SelectedCollection = vm.SmartNavigation.Single(item => item.Filter == NavigationFilter.AllSongs);
+        vm.PaneA.ToggleCheckedCommand.Execute(song);
+        vm.PaneA.AddBlacklistCommand.Execute(null);
+        vm.PaneA.ClearSelectionCommand.Execute(null);
+
+        pane.SelectedCollection = playlist;
+        pane.SelectedSong = song;
+        Assert.Contains(song, pane.VisibleSongs.Cast<SongItemViewModel>());
+        Assert.Same(song, pane.SelectedSong);
+        pane.ToggleCheckedCommand.Execute(song);
+        Assert.True(pane.IsSongChecked(song));
+        Assert.True(pane.IsBlacklistRemovalView);
+        Assert.True(pane.RemoveBlacklistCommand.CanExecute(null));
+        Assert.True(pane.RemoveFromCurrentPlaylistCommand.CanExecute(null));
+        Assert.Empty(pane.CreateDragPayload(song).Songs);
+
+        pane.RemoveBlacklistCommand.Execute(null);
+        Assert.False(song.IsBlacklisted);
+        Assert.Contains("Test Playlist A", song.PlaylistNames);
+        Assert.Contains(song, pane.VisibleSongs.Cast<SongItemViewModel>());
+
+        pane.ClearSelectionCommand.Execute(null);
+        pane.ToggleCheckedCommand.Execute(song);
+        pane.RemoveFromCurrentPlaylistCommand.Execute(null);
+        Assert.DoesNotContain("Test Playlist A", song.PlaylistNames);
+    }
+
     public void Dispose() => Directory.Delete(_root, true);
 }

@@ -63,7 +63,9 @@ public sealed class CollectionPaneViewModel : ObservableObject
     public ICommand RemoveBlacklistCommand { get; }
     public ICommand CreatePlaylistCommand { get; }
     public ICommand RenamePlaylistCommand { get; }
-    public bool IsBlacklistRemovalView => Side == PaneSide.A && SelectedCollection?.Filter == NavigationFilter.Blacklist;
+    public bool IsBlacklistRemovalView =>
+        SelectedCollection?.Filter == NavigationFilter.Blacklist ||
+        (IsPlaylist && CheckedSongs.Any(song => song.IsBlacklisted));
 
     private SongItemViewModel? _selectedSong;
     public SongItemViewModel? SelectedSong
@@ -141,8 +143,8 @@ public sealed class CollectionPaneViewModel : ObservableObject
     public void RaiseActiveStateChanged() => OnPropertyChanged(nameof(IsActive));
     public void RefreshLocalizedText() => Changed(nameof(CollectionType), nameof(SelectionDisplay), nameof(CollectionName));
     public bool IsSongChecked(SongItemViewModel song) => IsChecked(song);
-    public void Refresh() { _songsView.Refresh(); UpdateSelectionSnapshot(); Changed(nameof(VisibleCount), nameof(VisibleCheckedCount), nameof(SelectionDisplay), nameof(AreAllVisibleChecked)); RaiseCommands(); }
-    public void RaiseSelectionChanged() { UpdateSelectionSnapshot(); Changed(nameof(CheckedCount), nameof(VisibleCheckedCount), nameof(HasSelection), nameof(SelectionDisplay), nameof(AreAllVisibleChecked)); RaiseSelectionCommands(); }
+    public void Refresh() { _songsView.Refresh(); UpdateSelectionSnapshot(); Changed(nameof(VisibleCount), nameof(VisibleCheckedCount), nameof(SelectionDisplay), nameof(AreAllVisibleChecked), nameof(IsBlacklistRemovalView)); RaiseCommands(); }
+    public void RaiseSelectionChanged() { UpdateSelectionSnapshot(); Changed(nameof(CheckedCount), nameof(VisibleCheckedCount), nameof(HasSelection), nameof(SelectionDisplay), nameof(AreAllVisibleChecked), nameof(IsBlacklistRemovalView)); RaiseSelectionCommands(); }
     public void RaiseCommands()
     {
         RaiseSelectionCommands();
@@ -166,7 +168,7 @@ public sealed class CollectionPaneViewModel : ObservableObject
     private bool FilterSong(object value)
     {
         if (value is not SongItemViewModel song) return false;
-        if (SelectedCollection?.Filter != NavigationFilter.Blacklist && song.IsBlacklisted) return false;
+        if (SelectedCollection?.Filter is not (NavigationFilter.Blacklist or NavigationFilter.Playlist) && song.IsBlacklisted) return false;
         if (!string.IsNullOrWhiteSpace(SearchText) && !song.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !song.Artist.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !song.Mapper.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) return false;
         return SelectedCollection?.Filter switch { NavigationFilter.Favorites => song.IsFavorite, NavigationFilter.UnsortedFavorites => song.IsFavorite && song.PlaylistNames.Count == 0, NavigationFilter.Unassigned => song.Identity.Kind == Core.Models.SongKind.Custom && song.PlaylistNames.Count == 0, NavigationFilter.Blacklist => song.IsBlacklisted, NavigationFilter.Playlist => SelectedCollection.PlaylistName is not null && song.PlaylistNames.Contains(SelectedCollection.PlaylistName), _ => true };
     }

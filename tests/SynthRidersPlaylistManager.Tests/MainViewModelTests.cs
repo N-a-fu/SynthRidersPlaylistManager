@@ -137,13 +137,32 @@ public sealed class MainViewModelTests
 
         Assert.Equal(10, counts.Count);
         Assert.Equal(2, counts.BlacklistCount);
+        Assert.Equal("10 + BL 2", counts.CountDisplay);
         Assert.Equal("Count Playlist  10 + BL 2", counts.DisplayLabel);
     }
 
     [Theory]
-    [InlineData(10, 0, "Playlist  10")]
-    [InlineData(10, 2, "Playlist  10 + BL 2")]
-    [InlineData(0, 61, "Playlist  0 + BL 61")]
+    [InlineData(0, 61, 61, "0 + BL 61")]
+    [InlineData(4, 60, 64, "4 + BL 60")]
+    public void PlaylistShowsAvailableAndBlacklistedCustomRows(int available, int blacklisted, int visible, string badge)
+    {
+        using var viewModel = new MainViewModel(new PlaylistCountDataSource(available, blacklisted));
+        var playlist = Assert.Single(viewModel.PlaylistNavigation);
+
+        viewModel.PaneA.SelectedCollection = playlist;
+        viewModel.PaneB.SelectedCollection = playlist;
+
+        Assert.Equal(badge, playlist.CountDisplay);
+        Assert.Equal(visible, viewModel.PaneA.VisibleCount);
+        Assert.Equal(visible, viewModel.PaneB.VisibleCount);
+        Assert.Equal(blacklisted, viewModel.PaneA.VisibleSongs.Cast<SongItemViewModel>().Count(song => song.IsBlacklisted));
+        Assert.Equal(blacklisted, viewModel.PaneB.VisibleSongs.Cast<SongItemViewModel>().Count(song => song.IsBlacklisted));
+    }
+
+    [Theory]
+    [InlineData(10, 0, "10")]
+    [InlineData(10, 2, "10 + BL 2")]
+    [InlineData(0, 61, "0 + BL 61")]
     public void PlaylistNavigationFormatsBlacklistCountOnlyWhenPresent(int available, int blacklisted, string expected)
     {
         var item = new NavigationItemViewModel("Playlist", NavigationFilter.Playlist, "Playlist", available)
@@ -151,7 +170,8 @@ public sealed class MainViewModelTests
             BlacklistCount = blacklisted
         };
 
-        Assert.Equal(expected, item.DisplayLabel);
+        Assert.Equal(expected, item.CountDisplay);
+        Assert.Equal($"Playlist  {expected}", item.DisplayLabel);
     }
 
     [Fact]
@@ -323,19 +343,28 @@ public sealed class MainViewModelTests
 
     private sealed class PlaylistCountDataSource : ILibraryDataSource
     {
+        private readonly int _available;
+        private readonly int _blacklisted;
+
+        public PlaylistCountDataSource(int available = 10, int blacklisted = 2)
+        {
+            _available = available;
+            _blacklisted = blacklisted;
+        }
+
         public IReadOnlyList<Song> GetSongs()
         {
             var songs = new List<Song>();
-            for (var index = 0; index < 10; index++) songs.Add(Create($"normal-{index}", SongKind.Custom, false));
-            for (var index = 0; index < 2; index++) songs.Add(Create($"blacklist-{index}", SongKind.Custom, true));
-            songs.Add(Create("official", SongKind.OfficialOrDlc, false));
+            for (var index = 0; index < _available; index++) songs.Add(Create($"normal-{index}", SongKind.Custom, false, ["Count Playlist"]));
+            for (var index = 0; index < _blacklisted; index++) songs.Add(Create($"blacklist-{index}", SongKind.Custom, true, ["Count Playlist"]));
+            songs.Add(Create("official", SongKind.OfficialOrDlc, false, []));
             return songs;
         }
 
         public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("count.playlist", "Count Playlist", 99)];
 
-        private static Song Create(string id, SongKind kind, bool blacklisted) =>
-            new(new(kind, id), id, "Artist", "Mapper", null, null, "Fixture", false, ["Count Playlist"], null,
+        private static Song Create(string id, SongKind kind, bool blacklisted, IReadOnlyList<string> playlists) =>
+            new(new(kind, id), id, "Artist", "Mapper", null, null, "Fixture", false, playlists, null,
                 IsBlacklisted: blacklisted);
     }
 

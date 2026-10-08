@@ -11,6 +11,7 @@ public sealed class PaneRowBackgroundConverter : IMultiValueConverter
     private static readonly Brush HoverBrush = CreateBrush("#302C39");
     private static readonly Brush RowBrush = CreateBrush("#1E1D23");
     private static readonly Brush AlternateRowBrush = CreateBrush("#222128");
+    private static readonly Brush BlacklistRowBrush = CreateBrush("#15131A");
 
     public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
     {
@@ -21,10 +22,12 @@ public sealed class PaneRowBackgroundConverter : IMultiValueConverter
         var isActive = values.Length > 4 && values[4] is true;
         var mouseOver = values.Length > 5 && values[5] is true;
         var alternationIndex = values.Length > 6 && values[6] is int index ? index : 0;
+        var isBlacklisted = values.Length > 7 && values[7] is true;
         var paneChecked = side == PaneSide.A ? sourceChecked : destinationChecked;
 
         if (isActive && (rowSelected || paneChecked)) return HighlightBrush;
         if (mouseOver) return HoverBrush;
+        if (isBlacklisted) return BlacklistRowBrush;
         return alternationIndex % 2 == 0 ? RowBrush : AlternateRowBrush;
     }
 

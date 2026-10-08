@@ -47,6 +47,22 @@ public sealed class PaneRowBackgroundConverterTests(WpfTestFixture wpf)
     }
 
     [Fact]
+    public void BlacklistedRowUsesDistinctDarkBackgroundWithoutDisablingSelectionHighlight()
+    {
+        wpf.Run(() =>
+        {
+            var converter = new PaneRowBackgroundConverter();
+            var blacklisted = Assert.IsType<SolidColorBrush>(converter.Convert(
+                [false, false, false, PaneSide.A, true, false, 0, true], typeof(Brush), null, CultureInfo.InvariantCulture));
+            var selected = Assert.IsType<SolidColorBrush>(converter.Convert(
+                [true, false, false, PaneSide.A, true, false, 0, true], typeof(Brush), null, CultureInfo.InvariantCulture));
+
+            Assert.Equal(Color.FromRgb(0x15, 0x13, 0x1A), blacklisted.Color);
+            Assert.Equal(Color.FromRgb(0x28, 0x5A, 0x86), selected.Color);
+        });
+    }
+
+    [Fact]
     public void HoverIsDarkGrayAndDoesNotOverrideSelection()
     {
         wpf.Run(() =>

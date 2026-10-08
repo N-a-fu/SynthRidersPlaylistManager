@@ -303,7 +303,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public bool CanSetBlacklist(CollectionPaneViewModel pane) => CanSetBlacklistSongs(pane.CheckedSongs);
-    public bool CanRemoveBlacklist(CollectionPaneViewModel pane) => pane.SelectedCollection?.Filter == NavigationFilter.Blacklist && CanSetBlacklistSongs(pane.CheckedSongs.Where(s => s.IsBlacklisted).ToArray());
+    public bool CanRemoveBlacklist(CollectionPaneViewModel pane) => pane.IsBlacklistRemovalView && CanSetBlacklistSongs(pane.CheckedSongs.Where(s => s.IsBlacklisted).ToArray());
     public void RemovePaneBlacklist(CollectionPaneViewModel pane)
     {
         if (CanRemoveBlacklist(pane)) SetPaneBlacklist(pane, false, registeredOnly: true);
@@ -367,7 +367,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool FilterSourceSong(object item)
     {
         if (item is not SongItemViewModel s) return false;
-        if (SelectedSourceNavigation?.Filter != NavigationFilter.Blacklist && s.IsBlacklisted) return false;
+        if (SelectedSourceNavigation?.Filter is not (NavigationFilter.Blacklist or NavigationFilter.Playlist) && s.IsBlacklisted) return false;
         if (!string.IsNullOrWhiteSpace(SearchText) && !s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !s.Artist.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !s.Mapper.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) return false;
         return SelectedSourceNavigation?.Filter switch { NavigationFilter.Blacklist => s.IsBlacklisted, NavigationFilter.Favorites => s.IsFavorite, NavigationFilter.UnsortedFavorites => s.IsFavorite && s.PlaylistNames.Count == 0, NavigationFilter.Unassigned => s.Identity.Kind == SongKind.Custom && s.PlaylistNames.Count == 0, NavigationFilter.Playlist => SelectedSourceNavigation.PlaylistName is not null && s.PlaylistNames.Contains(SelectedSourceNavigation.PlaylistName), _ => true };
     }
