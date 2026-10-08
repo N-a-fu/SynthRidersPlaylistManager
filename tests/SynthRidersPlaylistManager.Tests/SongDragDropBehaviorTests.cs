@@ -82,6 +82,22 @@ public sealed class SongDragDropBehaviorTests
         });
     }
 
+    [Fact]
+    public void BlacklistedRowDoesNotCreateMouseDownDragPayload()
+    {
+        RunSta(() =>
+        {
+            using var vm = ProductionViewModelFixture.Create();
+            var song = vm.Songs.First();
+            song.IsBlacklisted = true;
+            var grid = new DataGrid { DataContext = vm.PaneA };
+
+            var payload = SongDragDropBehavior.CreateDragPayloadForMouseDown(grid, new DataGridRow { Item = song });
+
+            Assert.Null(payload);
+        });
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, false)]

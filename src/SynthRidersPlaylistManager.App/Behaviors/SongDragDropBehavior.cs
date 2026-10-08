@@ -69,9 +69,9 @@ public static class SongDragDropBehavior
         var item = ResolveDragItem(grid, origin);
         return (grid.DataContext, item) switch
         {
-            (CollectionPaneViewModel pane, not null) => pane.CreateDragPayload(item),
-            (MainViewModel vm, not null) when GetDragOrigin(grid) == "Destination" => vm.CreateDestinationDragPayload(item),
-            (MainViewModel vm, not null) => vm.CreateSourceDragPayload(item),
+            (CollectionPaneViewModel pane, not null) when pane.CreateDragPayload(item) is { Count: > 0 } payload => payload,
+            (MainViewModel vm, not null) when GetDragOrigin(grid) == "Destination" && vm.CreateDestinationDragPayload(item) is { Count: > 0 } payload => payload,
+            (MainViewModel vm, not null) when vm.CreateSourceDragPayload(item) is { Count: > 0 } payload => payload,
             _ => null
         };
     }

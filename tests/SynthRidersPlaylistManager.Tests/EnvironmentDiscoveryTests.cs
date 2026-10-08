@@ -22,6 +22,8 @@ public sealed class EnvironmentDiscoveryTests
         Assert.Equal(DataLocationStatus.Available, result.Find(DataLocationKind.SynthDatabase)?.Status);
         Assert.Equal(DataLocationStatus.Available, result.Find(DataLocationKind.ImagesCache)?.Status);
         Assert.Equal(DataLocationStatus.Available, result.Find(DataLocationKind.TempAudio)?.Status);
+        Assert.Equal("Environment.Summary.Success", result.Summary);
+        Assert.DoesNotContain("Phase 2A Read-only", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -33,6 +35,7 @@ public sealed class EnvironmentDiscoveryTests
 
         Assert.Equal(DataLocationStatus.NotConfigured, result.Find(DataLocationKind.GameRoot)?.Status);
         Assert.All(result.Locations.Where(x => x.Kind != DataLocationKind.GameRoot), x => Assert.Equal(DataLocationStatus.NotConfigured, x.Status));
+        Assert.Equal("Environment.Summary.Unavailable", result.Summary);
     }
 
     [Fact]
@@ -86,6 +89,7 @@ public sealed class EnvironmentDiscoveryTests
 
         Assert.Equal(DataLocationStatus.Invalid, result.Find(DataLocationKind.GameRoot)?.Status);
         Assert.False(saved.ManualOverrides.ContainsKey(DataLocationKind.GameRoot));
+        Assert.Equal("Environment.Summary.ManualOverrideRejected", result.Summary);
     }
 
     [Fact]

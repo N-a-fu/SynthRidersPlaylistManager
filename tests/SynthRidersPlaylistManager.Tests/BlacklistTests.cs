@@ -115,7 +115,7 @@ public sealed class BlacklistTests : IDisposable
         foreach (var song in songs)
         {
             Assert.True(song.IsBlacklisted);
-            Assert.Equal(0.55, song.RowOpacity);
+            Assert.Equal(1, song.RowOpacity);
             Assert.DoesNotContain(song, source.VisibleSongs.Cast<SongItemViewModel>());
             Assert.Same(song, other.VisibleSongs.Cast<SongItemViewModel>().Single(s => s.Identity == song.Identity));
             Assert.True(source.IsSongChecked(song));
@@ -163,6 +163,52 @@ public sealed class BlacklistTests : IDisposable
         vm.PaneA.AddBlacklistCommand.Execute(null);
         Assert.False(song.IsBlacklisted);
         Assert.True(vm.PaneA.ToggleCheckedCommand.CanExecute(song));
+    }
+
+    [Fact]
+    public void BlacklistedSongRemainsSelectableAndCheckableButCannotBeAddedOrDraggedUntilRemoved()
+    {
+        using var vm = ProductionViewModelFixture.Create();
+        var source = vm.PaneA;
+        var target = vm.PaneB;
+        source.SelectedCollection = vm.SmartNavigation.Single(item => item.Filter == NavigationFilter.AllSongs);
+        target.SelectedCollection = vm.PlaylistNavigation.Single(item => item.PlaylistName == "Test Playlist A");
+        var song = vm.Songs.Single(item => item.PlaylistNames.Contains("Test Playlist B") && !item.PlaylistNames.Contains("Test Playlist A"));
+
+        source.ToggleCheckedCommand.Execute(song);
+        source.AddBlacklistCommand.Execute(null);
+        source.SelectedCollection = vm.SmartNavigation.Single(item => item.Filter == NavigationFilter.Blacklist);
+        source.SelectedSong = song;
+
+        Assert.Same(song, Assert.Single(source.VisibleSongs.Cast<SongItemViewModel>()));
+        Assert.Same(song, source.SelectedSong);
+        Assert.True(source.IsSongChecked(song));
+        Assert.Equal(1, song.RowOpacity);
+
+        source.ClearSelectionCommand.Execute(null);
+        Assert.False(source.IsSongChecked(song));
+        source.ToggleCheckedCommand.Execute(song);
+        Assert.True(source.IsSongChecked(song));
+
+        var blockedPayload = source.CreateDragPayload(song);
+        Assert.Empty(blockedPayload.Songs);
+        Assert.False(source.AddToOppositeCommand.CanExecute(null));
+        Assert.False(target.DropCommand.CanExecute(blockedPayload));
+        Assert.False(vm.DropSongCommand.CanExecute(song));
+        vm.AddToOpposite(source, [song]);
+        vm.DropOnPane(target, blockedPayload);
+        Assert.Equal(["Test Playlist B"], song.PlaylistNames);
+
+        source.RemoveBlacklistCommand.Execute(null);
+        Assert.False(song.IsBlacklisted);
+        Assert.Equal(["Test Playlist B"], song.PlaylistNames);
+        source.SelectedCollection = vm.SmartNavigation.Single(item => item.Filter == NavigationFilter.AllSongs);
+        var allowedPayload = source.CreateDragPayload(song);
+        Assert.Single(allowedPayload.Songs);
+        Assert.True(target.DropCommand.CanExecute(allowedPayload));
+        target.DropCommand.Execute(allowedPayload);
+        Assert.Contains("Test Playlist A", song.PlaylistNames);
+        Assert.Contains("Test Playlist B", song.PlaylistNames);
     }
 
     public void Dispose() => Directory.Delete(_root, true);

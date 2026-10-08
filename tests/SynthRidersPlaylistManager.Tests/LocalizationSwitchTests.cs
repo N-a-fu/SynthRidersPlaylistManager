@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using SynthRidersPlaylistManager.App.Services;
 using SynthRidersPlaylistManager.App.ViewModels;
+using SynthRidersPlaylistManager.Core.Models;
 
 namespace SynthRidersPlaylistManager.Tests;
 
@@ -24,12 +25,30 @@ public sealed class LocalizationSwitchTests(WpfTestFixture wpf)
                 vm.PaneA.ToggleCheckedCommand.Execute(song);
                 vm.SelectedSong = song;
                 var title = song.Title; var artist = song.Artist; var mapper = song.Mapper;
+                var now = DateTimeOffset.Now;
+                var success = new EnvironmentDiscoveryResult(
+                    [new(DataLocationKind.GameRoot, "fixture", DataLocationSource.AutoDetected, DataLocationStatus.Available, now, "fixture", false),
+                     new(DataLocationKind.CustomSongs, null, DataLocationSource.NotResolved, DataLocationStatus.NotConfigured, now, "fixture", false)],
+                    "Environment.Summary.Success", now);
+                var unavailable = new EnvironmentDiscoveryResult([], "Environment.Summary.Unavailable", now);
+                var rejected = new EnvironmentDiscoveryResult([], "Environment.Summary.ManualOverrideRejected", now);
+
+                Assert.Equal("Steam版Synth Ridersを検出しました。Data Location 1/2件が利用可能です。", MainViewModel.LocalizeEnvironmentSummary(success));
+                Assert.Equal("Synth Ridersのデータを利用できません。\n設定を確認して、再読み込みしてください。", MainViewModel.LocalizeEnvironmentSummary(unavailable));
+                Assert.Equal("手動指定Pathを検証できなかったため保存していません。", MainViewModel.LocalizeEnvironmentSummary(rejected));
 
                 vm.ToggleLanguageCommand.Execute(null);
                 Assert.Equal("en-US", LocalizationService.CurrentLanguage);
                 Assert.Equal("All Favorites", vm.FavoritesNavigation[0].Label);
                 Assert.Equal("All Songs", vm.SmartNavigation[0].Label);
                 Assert.Equal("Blacklist", vm.SmartNavigation.Last().Label);
+                Assert.Equal("↻ Reload", MainViewModel.UiText("Action.Rescan"));
+                Assert.Equal("Normally, Synth Riders locations are detected automatically.\nOnly specify the paths below manually if automatic detection does not work correctly.", MainViewModel.UiText("Settings.PathDetectionHelp"));
+                Assert.Equal("Steam Synth Riders detected. 1 of 2 data locations are available.", MainViewModel.LocalizeEnvironmentSummary(success));
+                Assert.Equal("Synth Riders data is unavailable.\nCheck the settings and reload.", MainViewModel.LocalizeEnvironmentSummary(unavailable));
+                Assert.Equal("The manually specified path could not be validated and was not saved.", MainViewModel.LocalizeEnvironmentSummary(rejected));
+                Assert.Equal([NavigationFilter.Favorites, NavigationFilter.UnsortedFavorites], vm.FavoritesNavigation.Select(item => item.Filter));
+                Assert.Equal([NavigationFilter.AllSongs, NavigationFilter.Unassigned, NavigationFilter.Blacklist], vm.SmartNavigation.Select(item => item.Filter));
                 Assert.Equal("en-US", UiSettingsStore.CreateDefault().Load().Language);
                 LocalizationService.Apply("ja-JP", false);
                 LocalizationService.Initialize();
@@ -47,6 +66,8 @@ public sealed class LocalizationSwitchTests(WpfTestFixture wpf)
                 Assert.Equal("すべてのお気に入り", vm.FavoritesNavigation[0].Label);
                 Assert.Equal("すべての曲", vm.SmartNavigation[0].Label);
                 Assert.Equal("ブラックリスト", vm.SmartNavigation.Last().Label);
+                Assert.Equal("↻ 再読み込み", MainViewModel.UiText("Action.Rescan"));
+                Assert.Equal("通常はSynth Ridersの保存場所を自動検出します。\n正しく認識されない場合のみ、下の項目を手動で指定してください。", MainViewModel.UiText("Settings.PathDetectionHelp"));
                 Assert.Equal("ja-JP", UiSettingsStore.CreateDefault().Load().Language);
 
                 // Existing behavior remains enum/identity-driven, never label-driven.

@@ -65,9 +65,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Playlists = new(dataSource?.GetPlaylists() ?? []);
         foreach (var playlist in Playlists) _playlistFilesByName[playlist.Name] = playlist.Id;
         DestinationSongs = [];
-        FavoritesNavigation = [new(LocalizedNavigationLabel(NavigationFilter.Favorites), NavigationFilter.Favorites), new(LocalizedNavigationLabel(NavigationFilter.UnsortedFavorites), NavigationFilter.UnsortedFavorites), new(LocalizedNavigationLabel(NavigationFilter.AssignedFavorites), NavigationFilter.AssignedFavorites)];
+        FavoritesNavigation = [new(LocalizedNavigationLabel(NavigationFilter.Favorites), NavigationFilter.Favorites), new(LocalizedNavigationLabel(NavigationFilter.UnsortedFavorites), NavigationFilter.UnsortedFavorites)];
         PlaylistNavigation = new(Playlists.Select(x => new NavigationItemViewModel(x.Name, NavigationFilter.Playlist, x.Name, x.SongCount)));
-        SmartNavigation = [new(LocalizedNavigationLabel(NavigationFilter.AllSongs), NavigationFilter.AllSongs), new(LocalizedNavigationLabel(NavigationFilter.Unassigned), NavigationFilter.Unassigned), new(LocalizedNavigationLabel(NavigationFilter.MultiplePlaylists), NavigationFilter.MultiplePlaylists), new(LocalizedNavigationLabel(NavigationFilter.Custom), NavigationFilter.Custom), new(LocalizedNavigationLabel(NavigationFilter.OfficialOrDlc), NavigationFilter.OfficialOrDlc), new(LocalizedNavigationLabel(NavigationFilter.RecentlyAdded), NavigationFilter.RecentlyAdded), new(LocalizedNavigationLabel(NavigationFilter.Blacklist), NavigationFilter.Blacklist)];
+        SmartNavigation = [new(LocalizedNavigationLabel(NavigationFilter.AllSongs), NavigationFilter.AllSongs), new(LocalizedNavigationLabel(NavigationFilter.Unassigned), NavigationFilter.Unassigned), new(LocalizedNavigationLabel(NavigationFilter.Blacklist), NavigationFilter.Blacklist)];
         _sourceSongsView = CollectionViewSource.GetDefaultView(Songs);
         _sourceSongsView.Filter = FilterSourceSong;
 
@@ -87,6 +87,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         foreach (var playlist in PlaylistNavigation) ConfigurePlaylistCommands(playlist);
         PaneA = new CollectionPaneViewModel(this, PaneSide.A);
         PaneB = new CollectionPaneViewModel(this, PaneSide.B);
+        UpdatePlaylistCounts();
         CreatePlaylistCommand = PaneB.CreatePlaylistCommand;
         RenamePlaylistCommand = PaneB.RenamePlaylistCommand;
         OpenSettingsCommand = new RelayCommand(() => IsSettingsOpen = true);
@@ -169,7 +170,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool HasSelectedSong => SelectedSong is not null;
     public string SelectedSongTitleDisplay => SelectedSong?.Title ?? UiText("Mini.SelectSong");
     public bool CanEditDestination => CanManagePlaylists && SelectedDestinationNavigation?.PlaylistName is not null && !IsSamePlaylist;
-    public bool CanBulkAdd => HasSourceSelection && CanEditDestination;
+    public bool CanBulkAdd => HasSourceSelection && SourceCheckedSongs.All(song => !song.IsBlacklisted) && CanEditDestination;
     public bool CanBulkFavorite => CanSetFavorites(SourceCheckedSongs.Concat(DestinationCheckedSongs).Distinct().ToArray());
     public bool CanManagePlaylists => IsRealDataMode && GameState == GameAccessState.Stopped && !IsEnvironmentScanRunning && _playlistsPath is not null && _playlistStore?.IsGameStopped == true;
     public bool IsValidNewPlaylistName => IsValidNewPlaylistNameFor(PaneB);
@@ -240,8 +241,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public SongDragPayload CreateSourceDragPayload(SongItemViewModel dragged) => new(dragged.IsSourceChecked ? SourceCheckedSongs : [dragged], "Source");
-    public SongDragPayload CreateDestinationDragPayload(SongItemViewModel dragged) => new(dragged.IsDestinationChecked ? DestinationCheckedSongs : [dragged], "Destination");
+    public SongDragPayload CreateSourceDragPayload(SongItemViewModel dragged) => CreatePlaylistPayload(dragged.IsSourceChecked ? SourceCheckedSongs : [dragged], "Source");
+    public SongDragPayload CreateDestinationDragPayload(SongItemViewModel dragged) => CreatePlaylistPayload(dragged.IsDestinationChecked ? DestinationCheckedSongs : [dragged], "Destination");
+    private static SongDragPayload CreatePlaylistPayload(IReadOnlyList<SongItemViewModel> songs, string origin) =>
+        new(songs.Any(song => song.IsBlacklisted) ? [] : songs, origin);
 
     public void OnPaneCollectionChanged(CollectionPaneViewModel pane) => ApplyPaneCollection(pane, pane.SelectedCollection);
     public void ActivatePane(CollectionPaneViewModel pane) => ActivePaneSide = pane.Side;
@@ -271,9 +274,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return payload.Origin == source.Side.ToString() &&
             (!source.IsPlaylist || !string.IsNullOrWhiteSpace(payload.SourcePlaylist)) &&
             string.Equals(payload.SourcePlaylist, source.IsPlaylist ? source.SelectedCollection?.PlaylistName : null, StringComparison.OrdinalIgnoreCase) &&
-            payload.Songs.All(Songs.Contains);
+            payload.Songs.All(song => Songs.Contains(song) && !song.IsBlacklisted);
     }
-    public bool CanAddToOpposite(CollectionPaneViewModel source) => CanAddBetweenPanes(OppositePane(source));
+    public bool CanAddToOpposite(CollectionPaneViewModel source) => CanAddBetweenPanes(OppositePane(source)) && source.CheckedSongs.All(song => !song.IsBlacklisted);
     public void DropOnPane(CollectionPaneViewModel target, SongDragPayload payload)
     {
         if (CanDropOnPane(target, payload)) AddSongs(target, payload.Songs);
@@ -343,7 +346,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void AddSongs(CollectionPaneViewModel target, IReadOnlyList<SongItemViewModel> songs)
     {
-        if (!CanAddBetweenPanes(target) || target.SelectedCollection?.PlaylistName is not string name) return; var added = 0; var duplicates = 0;
+        if (!CanAddBetweenPanes(target) || songs.Count == 0 || songs.Any(song => song.IsBlacklisted) || target.SelectedCollection?.PlaylistName is not string name) return; var added = 0; var duplicates = 0;
         var additions = songs.Where(song => !song.PlaylistNames.Contains(name, StringComparer.OrdinalIgnoreCase)).ToArray();
         try
         {
@@ -366,12 +369,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (item is not SongItemViewModel s) return false;
         if (SelectedSourceNavigation?.Filter != NavigationFilter.Blacklist && s.IsBlacklisted) return false;
         if (!string.IsNullOrWhiteSpace(SearchText) && !s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !s.Artist.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !s.Mapper.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) return false;
-        return SelectedSourceNavigation?.Filter switch { NavigationFilter.Blacklist => s.IsBlacklisted, NavigationFilter.Favorites => s.IsFavorite, NavigationFilter.UnsortedFavorites => s.IsFavorite && s.PlaylistNames.Count == 0, NavigationFilter.AssignedFavorites => s.IsFavorite && s.PlaylistNames.Count > 0, NavigationFilter.Unassigned => s.PlaylistNames.Count == 0, NavigationFilter.MultiplePlaylists => s.PlaylistNames.Count > 1, NavigationFilter.Custom => s.Identity.Kind == SongKind.Custom, NavigationFilter.OfficialOrDlc => s.Identity.Kind == SongKind.OfficialOrDlc, NavigationFilter.RecentlyAdded => s.AddedAt >= DateTimeOffset.Now.AddDays(-30), NavigationFilter.Playlist => SelectedSourceNavigation.PlaylistName is not null && s.PlaylistNames.Contains(SelectedSourceNavigation.PlaylistName), _ => true };
+        return SelectedSourceNavigation?.Filter switch { NavigationFilter.Blacklist => s.IsBlacklisted, NavigationFilter.Favorites => s.IsFavorite, NavigationFilter.UnsortedFavorites => s.IsFavorite && s.PlaylistNames.Count == 0, NavigationFilter.Unassigned => s.Identity.Kind == SongKind.Custom && s.PlaylistNames.Count == 0, NavigationFilter.Playlist => SelectedSourceNavigation.PlaylistName is not null && s.PlaylistNames.Contains(SelectedSourceNavigation.PlaylistName), _ => true };
     }
-    private bool CanAcceptPayload(SongDragPayload p) => p.Count > 0 && CanEditDestination;
+    private bool CanAcceptPayload(SongDragPayload p) => p.Count > 0 && p.Songs.All(song => !song.IsBlacklisted) && CanEditDestination;
     private void AddPayloadToDestination(SongDragPayload payload)
     {
-        var name = SelectedDestinationNavigation?.PlaylistName; if (name is null || IsReadOnly || IsSamePlaylist) return;
+        var name = SelectedDestinationNavigation?.PlaylistName; if (name is null || IsReadOnly || IsSamePlaylist || payload.Songs.Any(song => song.IsBlacklisted)) return;
         var added = 0; var duplicates = 0;
         foreach (var song in payload.Songs) { if (!song.AddPlaylist(name)) { duplicates++; continue; } DestinationSongs.Add(song); added++; }
         SetStatusMessage($"{added}曲を{name}へ追加しました · {duplicates}曲は既に登録済みです"); RefreshMemberships();
@@ -448,7 +451,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void RefreshSourceFilter() { _sourceSongsView.Refresh(); Changed(nameof(VisibleSourceSongCount), nameof(VisibleSongCount)); RaiseSelectionState(); }
     private void RefreshDestination() { DestinationSongs.Clear(); var name = SelectedDestinationNavigation?.PlaylistName; if (name is not null) foreach (var song in Songs.Where(x => x.PlaylistNames.Contains(name))) DestinationSongs.Add(song); Changed(nameof(DestinationSongCount)); RaiseSelectionState(); }
     private void RefreshMemberships() { UpdatePlaylistCounts(); Changed(nameof(DestinationSongCount)); RefreshSourceFilter(); }
-    private void UpdatePlaylistCounts() { foreach (var item in PlaylistNavigation) item.Count = Songs.Count(x => item.PlaylistName is not null && x.PlaylistNames.Contains(item.PlaylistName)); for (var i = 0; i < Playlists.Count; i++) Playlists[i] = Playlists[i] with { SongCount = Songs.Count(x => x.PlaylistNames.Contains(Playlists[i].Name)) }; Changed(nameof(PlaylistCount)); }
+    private void UpdatePlaylistCounts()
+    {
+        foreach (var item in PlaylistNavigation)
+        {
+            if (item.PlaylistName is not string playlistName) continue;
+            item.Count = Songs.Count(song => song.Identity.Kind == SongKind.Custom && !song.IsBlacklisted && song.PlaylistNames.Contains(playlistName));
+            item.BlacklistCount = Songs.Count(song => song.Identity.Kind == SongKind.Custom && song.IsBlacklisted && song.PlaylistNames.Contains(playlistName));
+        }
+        for (var i = 0; i < Playlists.Count; i++)
+            Playlists[i] = Playlists[i] with { SongCount = Songs.Count(x => x.PlaylistNames.Contains(Playlists[i].Name)) };
+        Changed(nameof(PlaylistCount));
+    }
     private string PlaylistFileName(string playlistName) => _playlistFilesByName.TryGetValue(playlistName, out var fileName) ? fileName : throw new InvalidDataException("Playlist file identity is unavailable.");
     private static PlaylistWriteSong ToPlaylistWriteSong(SongItemViewModel song) => new(song.Identity.StableId, song.Title, song.Artist, song.Mapper, song.Duration?.TotalSeconds ?? 0);
     private static bool IsSafePlaylistName(string value)
@@ -488,10 +502,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static string LocalizedNavigationLabel(NavigationFilter filter) => UiText(filter switch
     {
         NavigationFilter.Favorites => "Collection.AllFavorites", NavigationFilter.UnsortedFavorites => "Collection.Unsorted",
-        NavigationFilter.AssignedFavorites => "Collection.InPlaylists", NavigationFilter.AllSongs => "Collection.AllSongs",
-        NavigationFilter.Unassigned => "Collection.NotInPlaylist", NavigationFilter.MultiplePlaylists => "Collection.MultiplePlaylists",
-        NavigationFilter.Custom => "Collection.Custom", NavigationFilter.OfficialOrDlc => "Collection.OfficialDlc",
-        NavigationFilter.RecentlyAdded => "Collection.RecentlyAdded", NavigationFilter.Blacklist => "Collection.Blacklist", _ => "Collection.Playlist"
+        NavigationFilter.AllSongs => "Collection.AllSongs", NavigationFilter.Unassigned => "Collection.NotInPlaylist",
+        NavigationFilter.Blacklist => "Collection.Blacklist", _ => "Collection.Playlist"
     });
     private void TogglePreview()
     {
@@ -610,8 +622,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var existing = EnvironmentLocations.FirstOrDefault(x => x.Kind == location.Kind);
             if (existing is null) EnvironmentLocations.Add(new(location)); else existing.Update(location);
         }
-        InstallSummary = result.Summary;
-        SetStatusMessage(result.Summary);
+        InstallSummary = LocalizeEnvironmentSummary(result);
+        SetStatusMessage(InstallSummary);
+    }
+    internal static string LocalizeEnvironmentSummary(EnvironmentDiscoveryResult result)
+    {
+        var text = UiText(result.Summary);
+        if (!string.Equals(result.Summary, "Environment.Summary.Success", StringComparison.Ordinal)) return text;
+        var available = result.Locations.Count(location => location.Status == DataLocationStatus.Available);
+        return string.Format(text, available, result.Locations.Count);
     }
     private async Task TryLoadRealLibraryAsync(EnvironmentDiscoveryResult environment)
     {

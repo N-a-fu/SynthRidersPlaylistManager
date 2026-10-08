@@ -13,7 +13,7 @@ public sealed class PlaylistCreateButtonStateTests
         vm.PlaylistNameDraft = "Button State Test";
         Assert.True(vm.CreatePlaylistCommand.CanExecute(null));
 
-        vm.PaneA.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.Custom);
+        vm.PaneA.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.Unassigned);
         vm.PaneB.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.AllSongs);
         Assert.Equal("Button State Test", vm.PlaylistNameDraft);
         Assert.True(vm.CreatePlaylistCommand.CanExecute(null));

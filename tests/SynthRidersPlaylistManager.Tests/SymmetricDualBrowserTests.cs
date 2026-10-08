@@ -68,7 +68,7 @@ public sealed class SymmetricDualBrowserTests
     [Fact]
     public void NonPlaylistCollectionsRejectDrop()
     {
-        var vm = ProductionViewModelFixture.Create(); vm.PaneA.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.AllSongs); vm.PaneB.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.Custom);
+        var vm = ProductionViewModelFixture.Create(); vm.PaneA.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.AllSongs); vm.PaneB.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.Unassigned);
         Assert.False(vm.CanReceiveDrop(vm.PaneA)); Assert.False(vm.CanReceiveDrop(vm.PaneB));
     }
 
@@ -84,7 +84,7 @@ public sealed class SymmetricDualBrowserTests
     public void ChangingPaneACollectionDoesNotChangePaneB()
     {
         var vm = ProductionViewModelFixture.Create(); var paneB = vm.PaneB.SelectedCollection;
-        vm.PaneA.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.Custom);
+        vm.PaneA.SelectedCollection = vm.SmartNavigation.First(x => x.Filter == NavigationFilter.Unassigned);
         Assert.Same(paneB, vm.PaneB.SelectedCollection);
     }
 

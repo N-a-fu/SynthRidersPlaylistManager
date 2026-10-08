@@ -87,10 +87,6 @@ public sealed partial class RealLibraryReader : IRealLibraryReader
                     else
                     {
                         unresolved.Add(new($"Playlist: {name}", hash, entry.Name, "SynthDBと照合できないため公式側または未解決として保持しました。"));
-                        builders[hash] = new(hash, SongKind.OfficialOrDlc, entry.Name, entry.Artist, entry.Mapper, null,
-                            entry.DurationSeconds is >= 0 ? TimeSpan.FromSeconds(entry.DurationSeconds.Value) : null,
-                            null, SongAvailability.Unknown, CoverResolution.Missing(hash), AudioResolution.Missing,
-                            !string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.Artist));
                     }
                 }
             });

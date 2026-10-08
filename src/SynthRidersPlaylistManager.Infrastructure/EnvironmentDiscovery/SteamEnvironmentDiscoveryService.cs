@@ -49,7 +49,7 @@ public sealed partial class SteamEnvironmentDiscoveryService : IEnvironmentDisco
 
         var current = await Task.Run(() => Discover(settings, cancellationToken), cancellationToken);
         var locations = current.Locations.Where(x => x.Kind != kind).Append(candidate).OrderBy(x => x.Kind).ToArray();
-        return new(locations, "手動指定Pathを検証できなかったため保存していません。", DateTimeOffset.Now);
+        return new(locations, "Environment.Summary.ManualOverrideRejected", DateTimeOffset.Now);
     }
 
     private EnvironmentDiscoveryResult Discover(DiscoverySettings settings, CancellationToken cancellationToken)
@@ -68,8 +68,8 @@ public sealed partial class SteamEnvironmentDiscoveryService : IEnvironmentDisco
 
         var available = locations.Count(x => x.Status == DataLocationStatus.Available);
         var summary = gameRoot.Status == DataLocationStatus.Available
-            ? $"Steam版Synth Ridersを検出しました。Data Location {available}/{locations.Count}件が利用可能です。Phase 2A Read-only。"
-            : "Synth Ridersを自動検出できませんでした。再検出または検証済みの手動指定を利用してください。Mock UIは引き続き使用できます。";
+            ? "Environment.Summary.Success"
+            : "Environment.Summary.Unavailable";
         return new(locations.OrderBy(x => x.Kind).ToArray(), summary, DateTimeOffset.Now);
 
         void AddDerived(DataLocationKind kind, string relativePath)

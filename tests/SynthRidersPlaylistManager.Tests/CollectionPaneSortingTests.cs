@@ -6,7 +6,7 @@ namespace SynthRidersPlaylistManager.Tests;
 public sealed class CollectionPaneSortingTests
 {
     [Fact]
-    public void SortCyclesThreeColumnsIndependentlyAndPreservesUnderlyingOrderAcrossFilterChanges()
+    public void SortTogglesThreeColumnsIndependentlyAndPreservesUnderlyingOrderAcrossFilterChanges()
     {
         using var vm = ProductionViewModelFixture.Create();
         var paneA = vm.PaneA;
@@ -49,8 +49,13 @@ public sealed class CollectionPaneSortingTests
         Assert.Equal(ListSortDirection.Descending, pane.SortDirection);
         AssertOrdered(pane.VisibleSongs.Cast<SongItemViewModel>().Select(selector), true);
         pane.CycleSort(property);
-        Assert.Null(pane.SortColumn);
-        Assert.Null(pane.SortDirection);
+        Assert.NotNull(pane.SortColumn);
+        Assert.Equal(ListSortDirection.Ascending, pane.SortDirection);
+        AssertOrdered(pane.VisibleSongs.Cast<SongItemViewModel>().Select(selector), false);
+        pane.CycleSort(property);
+        Assert.NotNull(pane.SortColumn);
+        Assert.Equal(ListSortDirection.Descending, pane.SortDirection);
+        AssertOrdered(pane.VisibleSongs.Cast<SongItemViewModel>().Select(selector), true);
     }
 
     private static void AssertOrdered(IEnumerable<string> values, bool descending)

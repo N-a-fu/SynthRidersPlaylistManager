@@ -39,7 +39,7 @@ public sealed class SongItemViewModel : ObservableObject
     public string? FileName { get; }
     public string? FavoriteReference { get; }
     public bool IsBlacklisted { get => _isBlacklisted; set { if (SetProperty(ref _isBlacklisted, value)) OnPropertyChanged(nameof(RowOpacity)); } }
-    public double RowOpacity => IsBlacklisted ? 0.55 : 1;
+    public double RowOpacity => 1;
     public string Title { get; }
     public string Artist { get; }
     public string Mapper { get; }

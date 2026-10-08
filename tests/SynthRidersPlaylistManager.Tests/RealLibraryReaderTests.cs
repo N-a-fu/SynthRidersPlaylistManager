@@ -26,23 +26,28 @@ public sealed class RealLibraryReaderTests
     }
 
     [Fact]
-    public async Task PreservesFavoriteAndPlaylistEntriesThatDoNotJoinSynthDb()
+    public async Task KeepsUnresolvedPlaylistRecordsOnDiskWithoutMaterializingThemInLibrary()
     {
         using var fixture = new LibraryFixture();
         fixture.AddTrack('a', "Custom", "Artist", "Mapper", "one.synth");
         var officialHash = fixture.Hash('f');
         fixture.WriteFavorites(fixture.Hash('a'), officialHash);
         fixture.WritePlaylist("mixed", (fixture.Hash('a'), "Custom", "Artist", "Mapper"), (officialHash, "Official Sample", "Built-in Artist", ""));
+        var playlistPath = Path.Combine(fixture.Playlists, "mixed.playlist");
+        var playlistBefore = File.ReadAllBytes(playlistPath);
 
         var snapshot = await fixture.Reader.LoadAsync(fixture.Environment());
 
-        Assert.Equal(2, snapshot.Songs.Count);
+        var custom = Assert.Single(snapshot.Songs);
+        Assert.Equal(SongKind.Custom, custom.Identity.Kind);
+        Assert.Contains("mixed", custom.PlaylistNames);
         Assert.Equal(1, snapshot.Diagnostics.FavoritesResolved);
         Assert.Equal(1, snapshot.Diagnostics.FavoritesUnresolved);
         Assert.Equal(1, snapshot.Diagnostics.PlaylistEntriesResolved);
         Assert.Equal(1, snapshot.Diagnostics.PlaylistEntriesUnresolved);
         Assert.Contains(snapshot.UnresolvedEntries, x => x.Hash == officialHash);
-        Assert.Contains(snapshot.Songs, x => x.Identity.Kind == SongKind.OfficialOrDlc && x.IsFavorite);
+        Assert.DoesNotContain(snapshot.Songs, x => x.Identity.StableId == officialHash);
+        Assert.Equal(playlistBefore, File.ReadAllBytes(playlistPath));
     }
 
     [Fact]
@@ -111,7 +116,7 @@ public sealed class RealLibraryReaderTests
     }
 
     [Fact]
-    public async Task OfficialSideSongNeverBorrowsCustomCoverMapping()
+    public async Task UnresolvedPlaylistEntryIsNotMaterializedAndItsImageRemainsOrphaned()
     {
         using var fixture = new LibraryFixture();
         fixture.AddTrack('a', "Custom", "Artist", "Mapper", "one.synth");
@@ -121,9 +126,9 @@ public sealed class RealLibraryReaderTests
 
         var snapshot = await fixture.Reader.LoadAsync(fixture.Environment());
 
-        var official = Assert.Single(snapshot.Songs, song => song.Identity.Kind == SongKind.OfficialOrDlc);
-        Assert.Equal(CoverArtState.Missing, official.CoverState);
-        Assert.Equal(1, snapshot.Diagnostics.Covers?.OfficialSideUnresolved);
+        Assert.Single(snapshot.Songs);
+        Assert.DoesNotContain(snapshot.Songs, song => song.Identity.StableId == officialHash);
+        Assert.Equal(0, snapshot.Diagnostics.Covers?.OfficialSideUnresolved);
         Assert.Equal(1, snapshot.Diagnostics.Covers?.OrphanImages);
     }
 

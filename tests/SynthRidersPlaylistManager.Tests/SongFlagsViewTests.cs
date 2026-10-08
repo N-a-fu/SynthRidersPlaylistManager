@@ -38,7 +38,7 @@ public sealed class SongFlagsViewTests(WpfTestFixture wpf)
                 var cells = Descendants<DataGridCell>(row).OrderBy(c => c.Column.DisplayIndex).ToArray();
                 Assert.Equal(8, cells.Length);
                 Assert.Equal(1, cells[0].Opacity); Assert.Equal(1, cells[1].Opacity);
-                Assert.All(cells.Skip(2), c => Assert.Equal(0.55, c.Opacity));
+                Assert.All(cells.Skip(2), c => Assert.Equal(1, c.Opacity));
                 var check = Assert.Single(Descendants<CheckBox>(cells[0]));
                 Assert.True(check.IsEnabled); Assert.Equal(1, check.Opacity);
                 var heart = Assert.Single(Descendants<Button>(cells[1]));
@@ -69,6 +69,12 @@ public sealed class SongFlagsViewTests(WpfTestFixture wpf)
                     view.UpdateLayout();
                     Assert.Equal(paneA, HasVisibleAncestorChain(action));
                     Assert.Equal(paneA || collection.Filter != NavigationFilter.Blacklist, action.IsEnabled);
+                    if (paneA && collection.Filter == NavigationFilter.Blacklist)
+                    {
+                        var clear = Assert.Single(Descendants<Button>(view), button => ReferenceEquals(button.Command, pane.ClearSelectionCommand));
+                        Assert.True(HasVisibleAncestorChain(clear));
+                        Assert.True(clear.IsEnabled);
+                    }
                 }
                 }
         });

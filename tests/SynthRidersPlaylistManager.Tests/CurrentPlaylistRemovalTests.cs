@@ -30,6 +30,7 @@ public sealed class CurrentPlaylistRemovalTests
             Assert.All(songs, song => Assert.DoesNotContain(current, song.PlaylistNames));
             Assert.All(songs, song => Assert.Contains(retained, song.PlaylistNames));
             Assert.Equal(0, currentNavigation.Count);
+            Assert.Equal(0, currentNavigation.BlacklistCount);
             Assert.Equal(favoriteBefore, songs.Select(s => s.IsFavorite));
             Assert.Equal(blacklistBefore, songs.Select(s => s.IsBlacklisted));
             Assert.Empty(pane.VisibleSongs.Cast<SongItemViewModel>());
@@ -43,6 +44,8 @@ public sealed class CurrentPlaylistRemovalTests
             vm.GameState = GameAccessState.Stopped;
             pane.SelectedCollection = new("All", NavigationFilter.AllSongs);
             other.SelectedCollection = vm.PlaylistNavigation.First(item => item.PlaylistName == "Empty Playlist");
+            pane.ClearSelectionCommand.Execute(null);
+            pane.ToggleCheckedCommand.Execute(songs[0]);
             var payload = pane.CreateDragPayload(songs[0]);
             Assert.True(other.DropCommand.CanExecute(payload));
             other.DropCommand.Execute(payload);

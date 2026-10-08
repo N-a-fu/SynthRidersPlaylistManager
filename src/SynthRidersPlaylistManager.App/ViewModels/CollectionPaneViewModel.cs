@@ -80,7 +80,7 @@ public sealed class CollectionPaneViewModel : ObservableObject
     public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) Refresh(); } }
     public string PlaylistNameDraft { get => _playlistNameDraft; set { if (SetProperty(ref _playlistNameDraft, value)) RaisePlaylistCommands(); } }
     public string CollectionName => SelectedCollection?.Label ?? "Collection未選択";
-    public string CollectionType => MainViewModel.UiText(SelectedCollection?.Filter == NavigationFilter.Playlist ? "Nav.Playlists" : SelectedCollection?.Filter is NavigationFilter.Favorites or NavigationFilter.UnsortedFavorites or NavigationFilter.AssignedFavorites ? "Nav.Favorites" : "Nav.Filters");
+    public string CollectionType => MainViewModel.UiText(SelectedCollection?.Filter == NavigationFilter.Playlist ? "Nav.Playlists" : SelectedCollection?.Filter is NavigationFilter.Favorites or NavigationFilter.UnsortedFavorites ? "Nav.Favorites" : "Nav.Filters");
     public bool IsPlaylist => SelectedCollection?.Filter == NavigationFilter.Playlist;
     public bool IsNavigatorOpen { get => _isNavigatorOpen; set => SetProperty(ref _isNavigatorOpen, value); }
     public int VisibleCount => _songsView.Cast<object>().Count();
@@ -114,10 +114,7 @@ public sealed class CollectionPaneViewModel : ObservableObject
         else if (_sortDirection == ListSortDirection.Ascending)
             _sortDirection = ListSortDirection.Descending;
         else
-        {
-            _sortColumn = null;
-            _sortDirection = null;
-        }
+            _sortDirection = ListSortDirection.Ascending;
 
         using (_songsView.DeferRefresh())
         {
@@ -135,7 +132,11 @@ public sealed class CollectionPaneViewModel : ObservableObject
         _ => nameof(SongItemViewModel.MapperDisplay)
     };
 
-    public SongDragPayload CreateDragPayload(SongItemViewModel dragged) => new(IsChecked(dragged) ? CheckedSongs : [dragged], Side.ToString(), IsPlaylist ? SelectedCollection?.PlaylistName : null);
+    public SongDragPayload CreateDragPayload(SongItemViewModel dragged)
+    {
+        var songs = IsChecked(dragged) ? CheckedSongs : [dragged];
+        return new(songs.Any(song => song.IsBlacklisted) ? [] : songs, Side.ToString(), IsPlaylist ? SelectedCollection?.PlaylistName : null);
+    }
     public void Activate() => _owner.ActivatePane(this);
     public void RaiseActiveStateChanged() => OnPropertyChanged(nameof(IsActive));
     public void RefreshLocalizedText() => Changed(nameof(CollectionType), nameof(SelectionDisplay), nameof(CollectionName));
@@ -167,7 +168,7 @@ public sealed class CollectionPaneViewModel : ObservableObject
         if (value is not SongItemViewModel song) return false;
         if (SelectedCollection?.Filter != NavigationFilter.Blacklist && song.IsBlacklisted) return false;
         if (!string.IsNullOrWhiteSpace(SearchText) && !song.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !song.Artist.Contains(SearchText, StringComparison.OrdinalIgnoreCase) && !song.Mapper.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) return false;
-        return SelectedCollection?.Filter switch { NavigationFilter.Favorites => song.IsFavorite, NavigationFilter.UnsortedFavorites => song.IsFavorite && song.PlaylistNames.Count == 0, NavigationFilter.AssignedFavorites => song.IsFavorite && song.PlaylistNames.Count > 0, NavigationFilter.Unassigned => song.PlaylistNames.Count == 0, NavigationFilter.MultiplePlaylists => song.PlaylistNames.Count > 1, NavigationFilter.Custom => song.Identity.Kind == Core.Models.SongKind.Custom, NavigationFilter.OfficialOrDlc => song.Identity.Kind == Core.Models.SongKind.OfficialOrDlc, NavigationFilter.RecentlyAdded => song.AddedAt >= DateTimeOffset.Now.AddDays(-30), NavigationFilter.Blacklist => song.IsBlacklisted, NavigationFilter.Playlist => SelectedCollection.PlaylistName is not null && song.PlaylistNames.Contains(SelectedCollection.PlaylistName), _ => true };
+        return SelectedCollection?.Filter switch { NavigationFilter.Favorites => song.IsFavorite, NavigationFilter.UnsortedFavorites => song.IsFavorite && song.PlaylistNames.Count == 0, NavigationFilter.Unassigned => song.Identity.Kind == Core.Models.SongKind.Custom && song.PlaylistNames.Count == 0, NavigationFilter.Blacklist => song.IsBlacklisted, NavigationFilter.Playlist => SelectedCollection.PlaylistName is not null && song.PlaylistNames.Contains(SelectedCollection.PlaylistName), _ => true };
     }
     private bool IsChecked(SongItemViewModel song) => Side == PaneSide.A ? song.IsSourceChecked : song.IsDestinationChecked;
     private void SetChecked(SongItemViewModel song, bool value) => _owner.SetPaneChecked(Side, song, value);

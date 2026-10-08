@@ -45,3 +45,7 @@ backups/
 **/ImagesCache/
 **/tempExt/
 **/CustomSongs/
+
+# Local research notes containing machine-observed user data
+docs/phase-0.5-game-data-analysis.md
+docs/phase-2b-real-song-library.md

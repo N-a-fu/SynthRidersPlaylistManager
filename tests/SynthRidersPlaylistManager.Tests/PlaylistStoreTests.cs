@@ -19,6 +19,15 @@ public sealed class PlaylistStoreTests
         Assert.Empty(Data(fixture.Path(created.FileName)));
         var withUnknown = Root(fixture.Path(created.FileName));
         withUnknown["unknownField"] = "kept";
+        var officialHash = new string('f', 64);
+        withUnknown["dataString"]!.AsArray().Add(new JsonObject
+        {
+            ["hash"] = officialHash,
+            ["name"] = "Official fixture",
+            ["author"] = "Built-in artist",
+            ["beatmapper"] = "",
+            ["unknownRecordField"] = "preserve"
+        });
         File.WriteAllText(fixture.Path(created.FileName), withUnknown.ToJsonString(), new UTF8Encoding(false));
 
         var songA = Song('a', "First");
@@ -26,7 +35,7 @@ public sealed class PlaylistStoreTests
         var songC = Song('c', "Third");
         store.AddSongs(fixture.Directory, created.FileName, [songA, songB, songC]);
         store.AddSongs(fixture.Directory, created.FileName, [songA]);
-        Assert.Equal([songA.Hash, songB.Hash, songC.Hash], Data(fixture.Path(created.FileName)).Select(NodeHash));
+        Assert.Equal([officialHash, songA.Hash, songB.Hash, songC.Hash], Data(fixture.Path(created.FileName)).Select(NodeHash));
 
         var renamed = store.Rename(fixture.Directory, created.FileName, "Renamed Mix");
         Assert.Equal("000006__renamedmix.playlist", renamed.FileName);
@@ -34,7 +43,8 @@ public sealed class PlaylistStoreTests
         Assert.Equal("Renamed Mix", renamedRoot["namePlaylist"]!.GetValue<string>());
 
         store.RemoveSongs(fixture.Directory, renamed.FileName, [songA.Hash, songB.Hash]);
-        Assert.Equal([songC.Hash], Data(fixture.Path(renamed.FileName)).Select(NodeHash));
+        Assert.Equal([officialHash, songC.Hash], Data(fixture.Path(renamed.FileName)).Select(NodeHash));
+        Assert.Equal("preserve", Data(fixture.Path(renamed.FileName))[0]!["unknownRecordField"]!.GetValue<string>());
         Assert.Equal("kept", Root(fixture.Path(renamed.FileName))["unknownField"]!.GetValue<string>());
         Assert.NotEmpty(System.IO.Directory.EnumerateFiles(fixture.Directory, "*.bak"));
 

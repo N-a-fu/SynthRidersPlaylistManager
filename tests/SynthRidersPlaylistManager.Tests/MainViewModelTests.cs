@@ -130,6 +130,66 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void PlaylistNavigationSeparatesAvailableAndBlacklistedCustomCounts()
+    {
+        using var viewModel = new MainViewModel(new PlaylistCountDataSource());
+        var counts = Assert.Single(viewModel.PlaylistNavigation);
+
+        Assert.Equal(10, counts.Count);
+        Assert.Equal(2, counts.BlacklistCount);
+        Assert.Equal("Count Playlist  10 + BL 2", counts.DisplayLabel);
+    }
+
+    [Theory]
+    [InlineData(10, 0, "Playlist  10")]
+    [InlineData(10, 2, "Playlist  10 + BL 2")]
+    [InlineData(0, 61, "Playlist  0 + BL 61")]
+    public void PlaylistNavigationFormatsBlacklistCountOnlyWhenPresent(int available, int blacklisted, string expected)
+    {
+        var item = new NavigationItemViewModel("Playlist", NavigationFilter.Playlist, "Playlist", available)
+        {
+            BlacklistCount = blacklisted
+        };
+
+        Assert.Equal(expected, item.DisplayLabel);
+    }
+
+    [Fact]
+    public void PlaylistNavigationMovesCountBetweenAvailableAndBlacklistStates()
+    {
+        using var viewModel = ProductionViewModelFixture.Create();
+        var playlist = viewModel.PlaylistNavigation.Single(item => item.PlaylistName == "Test Playlist A");
+        var song = viewModel.Songs.First(item => item.PlaylistNames.Contains("Test Playlist A"));
+        var availableBefore = playlist.Count;
+
+        viewModel.PaneA.SelectedCollection = viewModel.SmartNavigation.Single(item => item.Filter == NavigationFilter.AllSongs);
+        viewModel.PaneA.ToggleCheckedCommand.Execute(song);
+        viewModel.PaneA.AddBlacklistCommand.Execute(null);
+        Assert.Equal(availableBefore - 1, playlist.Count);
+        Assert.Equal(1, playlist.BlacklistCount);
+
+        viewModel.PaneA.SelectedCollection = viewModel.SmartNavigation.Single(item => item.Filter == NavigationFilter.Blacklist);
+        viewModel.PaneA.RemoveBlacklistCommand.Execute(null);
+        Assert.Equal(availableBefore, playlist.Count);
+        Assert.Equal(0, playlist.BlacklistCount);
+    }
+
+    [Fact]
+    public void UnassignedContainsOnlyCustomSongsWithoutPlaylistMembershipRegardlessOfFavorite()
+    {
+        using var viewModel = new MainViewModel(new UnassignedDataSource());
+        var unassigned = viewModel.SmartNavigation.Single(item => item.Filter == NavigationFilter.Unassigned);
+
+        viewModel.PaneA.SelectedCollection = unassigned;
+        Assert.Equal(["Custom Unfavorite", "Custom Favorite"],
+            viewModel.PaneA.VisibleSongs.Cast<SongItemViewModel>().Select(song => song.Title));
+
+        viewModel.SelectedSourceNavigation = unassigned;
+        Assert.Equal(["Custom Unfavorite", "Custom Favorite"],
+            viewModel.SourceSongsView.Cast<SongItemViewModel>().Select(song => song.Title));
+    }
+
+    [Fact]
     public void MultiplePlaylistMembershipRemainsACollection()
     {
         var viewModel = ProductionViewModelFixture.Create();
@@ -259,6 +319,41 @@ public sealed class MainViewModelTests
             new(new(SongKind.Custom, "missing"), "Missing", "Artist", "Mapper", null, null, "Unknown", false, [], null)
         ];
         public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("audio-fixture", "Audio Fixture Playlist", 0)];
+    }
+
+    private sealed class PlaylistCountDataSource : ILibraryDataSource
+    {
+        public IReadOnlyList<Song> GetSongs()
+        {
+            var songs = new List<Song>();
+            for (var index = 0; index < 10; index++) songs.Add(Create($"normal-{index}", SongKind.Custom, false));
+            for (var index = 0; index < 2; index++) songs.Add(Create($"blacklist-{index}", SongKind.Custom, true));
+            songs.Add(Create("official", SongKind.OfficialOrDlc, false));
+            return songs;
+        }
+
+        public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("count.playlist", "Count Playlist", 99)];
+
+        private static Song Create(string id, SongKind kind, bool blacklisted) =>
+            new(new(kind, id), id, "Artist", "Mapper", null, null, "Fixture", false, ["Count Playlist"], null,
+                IsBlacklisted: blacklisted);
+    }
+
+    private sealed class UnassignedDataSource : ILibraryDataSource
+    {
+        public IReadOnlyList<Song> GetSongs() =>
+        [
+            Song("custom-unfavorite", "Custom Unfavorite", SongKind.Custom, false, []),
+            Song("custom-favorite", "Custom Favorite", SongKind.Custom, true, []),
+            Song("custom-assigned", "Custom Assigned", SongKind.Custom, false, ["Playlist"]),
+            Song("custom-assigned-favorite", "Custom Assigned Favorite", SongKind.Custom, true, ["Playlist"]),
+            Song("official", "Official", SongKind.OfficialOrDlc, false, [])
+        ];
+
+        public IReadOnlyList<PlaylistSummary> GetPlaylists() => [new("fixture.playlist", "Playlist", 2)];
+
+        private static Song Song(string id, string title, SongKind kind, bool favorite, IReadOnlyList<string> playlists) =>
+            new(new(kind, id), title, "Artist", "Mapper", null, null, "Fixture", favorite, playlists, null);
     }
 
     private sealed class FakeAudioPreviewPlayer : IAudioPreviewPlayer
