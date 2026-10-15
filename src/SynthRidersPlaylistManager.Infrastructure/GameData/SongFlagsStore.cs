@@ -73,11 +73,9 @@ public sealed class SongFlagsStore(Func<bool>? isGameStopped = null) : ISongFlag
             root[field] = replacement;
             var expected = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
             var temporary = path + ".srpm-" + Guid.NewGuid().ToString("N") + ".tmp";
-            var backup = path + ".srpm-" + Guid.NewGuid().ToString("N") + ".bak";
             try
             {
                 EnsureStopped();
-                File.WriteAllBytes(backup, original);
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
                     var bytes = System.Text.Encoding.UTF8.GetBytes(expected);

@@ -70,8 +70,6 @@ public sealed partial class PlaylistStore(Func<bool>? isGameStopped = null) : IP
             EnsureStopped();
             var path = SafePath(directory, fileName);
             _ = RequiredName(Parse(File.ReadAllBytes(path)));
-            var backup = BackupPath(path);
-            File.Copy(path, backup, false);
             EnsureStopped();
             File.Delete(path);
         }
@@ -119,10 +117,9 @@ public sealed partial class PlaylistStore(Func<bool>? isGameStopped = null) : IP
     private void Replace(string path, JsonObject root)
     {
         var original = File.ReadAllBytes(path);
-        var temp = TemporaryPath(path); var backup = BackupPath(path);
+        var temp = TemporaryPath(path);
         try
         {
-            File.WriteAllBytes(backup, original);
             WriteAndValidate(temp, root);
             EnsureStopped();
             if (!original.AsSpan().SequenceEqual(File.ReadAllBytes(path))) throw new IOException("Playlist changed externally; rescan and retry.");
@@ -134,15 +131,14 @@ public sealed partial class PlaylistStore(Func<bool>? isGameStopped = null) : IP
     private void ReplaceOrRename(string source, string target, JsonObject root)
     {
         if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase)) { Replace(source, root); return; }
-        var original = File.ReadAllBytes(source); var temp = TemporaryPath(source); var backup = BackupPath(source);
+        var original = File.ReadAllBytes(source); var temp = TemporaryPath(source);
         try
         {
-            File.WriteAllBytes(backup, original); WriteAndValidate(temp, root); EnsureStopped();
+            WriteAndValidate(temp, root); EnsureStopped();
             if (!original.AsSpan().SequenceEqual(File.ReadAllBytes(source))) throw new IOException("Playlist changed externally; rescan and retry.");
-            File.Move(source, backup + ".original");
-            try { File.Move(temp, target); }
-            catch { File.Move(backup + ".original", source); throw; }
-            File.Delete(backup + ".original");
+            File.Move(temp, target);
+            try { File.Delete(source); }
+            catch { File.Delete(target); throw; }
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
@@ -180,7 +176,6 @@ public sealed partial class PlaylistStore(Func<bool>? isGameStopped = null) : IP
     }
     private static string? FindByName(string directory, string name) => Directory.EnumerateFiles(directory, "*.playlist").FirstOrDefault(path => { try { return string.Equals(RequiredName(Parse(File.ReadAllBytes(path))), name, StringComparison.OrdinalIgnoreCase); } catch { return false; } });
     private static string TemporaryPath(string path) => path + ".srpm-" + Guid.NewGuid().ToString("N") + ".tmp";
-    private static string BackupPath(string path) => path + ".srpm-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".bak";
     private void EnsureStopped() { if (!IsGameStopped) throw new InvalidOperationException("Synth Riders is running or process state is unavailable."); }
     private static bool CheckStopped() { try { var processes = Process.GetProcessesByName("SynthRiders"); try { return processes.Length == 0; } finally { foreach (var process in processes) process.Dispose(); } } catch { return false; } }
     [GeneratedRegex(@"^(\d{6})__.+\.playlist$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex Prefix();

@@ -9,10 +9,12 @@ namespace SynthRidersPlaylistManager.Tests;
 public sealed class PlaylistStoreTests
 {
     [Fact]
-    public void CreateRenameAddRemoveAndDeleteUseSafeRealFiles()
+    public void CreateRenameAddRemoveAndDeleteUseSafeRealFilesWithoutCreatingBackups()
     {
         using var fixture = new PlaylistFixture();
         var store = new PlaylistStore(() => true);
+        var existingBackup = fixture.Path("existing.playlist.srpm-existing.bak");
+        File.WriteAllText(existingBackup, "existing backup");
 
         var created = store.Create(fixture.Directory, "SPM TEST C");
         Assert.Equal("000006__spmtestc.playlist", created.FileName);
@@ -46,11 +48,12 @@ public sealed class PlaylistStoreTests
         Assert.Equal([officialHash, songC.Hash], Data(fixture.Path(renamed.FileName)).Select(NodeHash));
         Assert.Equal("preserve", Data(fixture.Path(renamed.FileName))[0]!["unknownRecordField"]!.GetValue<string>());
         Assert.Equal("kept", Root(fixture.Path(renamed.FileName))["unknownField"]!.GetValue<string>());
-        Assert.NotEmpty(System.IO.Directory.EnumerateFiles(fixture.Directory, "*.bak"));
+        Assert.Equal([existingBackup], System.IO.Directory.EnumerateFiles(fixture.Directory, "*.bak"));
+        Assert.Equal("existing backup", File.ReadAllText(existingBackup));
 
         store.Delete(fixture.Directory, renamed.FileName);
         Assert.False(File.Exists(fixture.Path(renamed.FileName)));
-        Assert.NotEmpty(System.IO.Directory.EnumerateFiles(fixture.Directory, "*.bak"));
+        Assert.Equal([existingBackup], System.IO.Directory.EnumerateFiles(fixture.Directory, "*.bak"));
     }
 
     [Fact]
@@ -63,6 +66,40 @@ public sealed class PlaylistStoreTests
         Assert.Throws<InvalidOperationException>(() => store.RemoveSongs(fixture.Directory, "000005__existing.playlist", [new string('a', 64)]));
         Assert.Throws<InvalidOperationException>(() => store.Rename(fixture.Directory, "000005__existing.playlist", "Blocked"));
         Assert.Throws<InvalidOperationException>(() => store.Delete(fixture.Directory, "000005__existing.playlist"));
+    }
+
+    [Fact]
+    public void ConcurrentExternalChangeIsNotOverwrittenAndCreatesNoBackup()
+    {
+        using var fixture = new PlaylistFixture();
+        var path = fixture.Path("000005__existing.playlist");
+        var external = File.ReadAllText(path).Replace("Existing", "External", StringComparison.Ordinal);
+        var checks = 0;
+        var store = new PlaylistStore(() =>
+        {
+            if (++checks == 2) File.WriteAllText(path, external, new UTF8Encoding(false));
+            return true;
+        });
+
+        Assert.Throws<IOException>(() => store.AddSongs(fixture.Directory, "000005__existing.playlist", [Song('a', "A")]));
+        Assert.Equal(external, File.ReadAllText(path));
+        Assert.Empty(Directory.GetFiles(fixture.Directory, "*.bak"));
+        Assert.Empty(Directory.GetFiles(fixture.Directory, "*.tmp"));
+    }
+
+    [Fact]
+    public void ReplaceFailureKeepsOriginalAndCreatesNoBackup()
+    {
+        using var fixture = new PlaylistFixture();
+        var path = fixture.Path("000005__existing.playlist");
+        var before = File.ReadAllBytes(path);
+        using var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        Assert.Throws<IOException>(() => new PlaylistStore(() => true).AddSongs(
+            fixture.Directory, "000005__existing.playlist", [Song('a', "A")]));
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Empty(Directory.GetFiles(fixture.Directory, "*.bak"));
+        Assert.Empty(Directory.GetFiles(fixture.Directory, "*.tmp"));
     }
 
     private static PlaylistWriteSong Song(char hash, string title) => new(new string(hash, 64), title, "Artist", "Mapper", 123);

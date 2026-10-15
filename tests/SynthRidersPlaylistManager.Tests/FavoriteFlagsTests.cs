@@ -17,12 +17,15 @@ public sealed class FavoriteFlagsTests : IDisposable
     public FavoriteFlagsTests() { Directory.CreateDirectory(_root); File.WriteAllText(PathName, "{\"Favorite\":[],\"unknown\":{\"n\":42,\"a\":[null,true,\"保持\"]}}"); }
 
     [Fact]
-    public void OnOffPreservesUnknownFieldsAndBacksUpOriginal()
+    public void OnOffPreservesUnknownFieldsWithoutCreatingBackup()
     {
         var store = new SongFlagsStore(() => true);
         var before = File.ReadAllBytes(PathName);
+        var existingBackup = Path.Combine(_root, "favorites.bin.srpm-existing.bak");
+        File.WriteAllText(existingBackup, "existing backup");
         Assert.Contains(Entry, store.SetFavorites(PathName, [Entry], true));
-        Assert.Equal(before, File.ReadAllBytes(Assert.Single(Directory.GetFiles(_root, "*.bak"))));
+        Assert.Equal([existingBackup], Directory.GetFiles(_root, "*.bak"));
+        Assert.Equal("existing backup", File.ReadAllText(existingBackup));
         Assert.True(JsonNode.DeepEquals(JsonNode.Parse(before)!["unknown"], JsonNode.Parse(File.ReadAllText(PathName))!["unknown"]));
         var written = File.ReadAllBytes(PathName);
         store.SetFavorites(PathName, [Entry, "Renamed-Artist-" + Hash], true);

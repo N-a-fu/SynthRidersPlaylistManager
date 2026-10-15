@@ -21,15 +21,17 @@ public sealed class BlacklistTests : IDisposable
     }
 
     [Fact]
-    public void BulkOnOffIsIdempotentAndPreservesUnknownJsonAndBackup()
+    public void BulkOnOffIsIdempotentAndPreservesUnknownJsonWithoutCreatingBackup()
     {
         var before = File.ReadAllBytes(Settings);
         var original = JsonNode.Parse(before)!;
         var store = new SongFlagsStore(() => true);
+        var existingBackup = Path.Combine(_root, "twitchsettings.bin.srpm-existing.bak");
+        File.WriteAllText(existingBackup, "existing backup");
         var saved = store.SetBlacklist(_root, ["one.synth", "two.synth", "one.synth"], true);
         Assert.Equal(3, saved.Count);
-        var backup = Assert.Single(Directory.GetFiles(_root, "*.bak"));
-        Assert.Equal(before, File.ReadAllBytes(backup));
+        Assert.Equal([existingBackup], Directory.GetFiles(_root, "*.bak"));
+        Assert.Equal("existing backup", File.ReadAllText(existingBackup));
         var after = JsonNode.Parse(File.ReadAllText(Settings))!;
         Assert.True(JsonNode.DeepEquals(original["unknown"], after["unknown"]));
         Assert.True(JsonNode.DeepEquals(original["volume"], after["volume"]));
@@ -37,7 +39,7 @@ public sealed class BlacklistTests : IDisposable
         store.SetBlacklist(_root, ["one.synth", "two.synth"], true);
         store.SetBlacklist(_root, ["absent.synth"], false);
         Assert.Equal(bytes, File.ReadAllBytes(Settings));
-        Assert.Single(Directory.GetFiles(_root, "*.bak"));
+        Assert.Equal([existingBackup], Directory.GetFiles(_root, "*.bak"));
         saved = store.SetBlacklist(_root, ["one.synth", "two.synth"], false);
         Assert.Equal("existing.synth", Assert.Single(saved));
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
@@ -53,13 +55,13 @@ public sealed class BlacklistTests : IDisposable
     }
 
     [Fact]
-    public void GameStartingBeforeReplaceLeavesOriginalAndRecoverableBackup()
+    public void GameStartingBeforeReplaceLeavesOriginalWithoutBackup()
     {
         var before = File.ReadAllBytes(Settings);
         var checks = 0;
         Assert.Throws<InvalidOperationException>(() => new SongFlagsStore(() => ++checks < 3).SetBlacklist(_root, ["one.synth"], true));
         Assert.Equal(before, File.ReadAllBytes(Settings));
-        Assert.Equal(before, File.ReadAllBytes(Assert.Single(Directory.GetFiles(_root, "*.bak"))));
+        Assert.Empty(Directory.GetFiles(_root, "*.bak"));
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
     }
 
@@ -92,7 +94,7 @@ public sealed class BlacklistTests : IDisposable
         using var locked = new FileStream(Settings, FileMode.Open, FileAccess.Read, FileShare.Read);
         Assert.Throws<IOException>(() => new SongFlagsStore(() => true).SetBlacklist(_root, ["one.synth"], true));
         Assert.Equal(before, File.ReadAllBytes(Settings));
-        Assert.Equal(before, File.ReadAllBytes(Assert.Single(Directory.GetFiles(_root, "*.bak"))));
+        Assert.Empty(Directory.GetFiles(_root, "*.bak"));
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
     }
 
